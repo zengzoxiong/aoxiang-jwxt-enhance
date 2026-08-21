@@ -22,8 +22,8 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @homepage     https://github.com/zengzoxiong/aoxiang-jwxt-enhance
-// @downloadURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.user.js
-// @updateURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.meta.js
+// @downloadURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.user.js
+// @updateURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.meta.js
 // ==/UserScript==
 
 // ==================== 用户可配置区域 ====================
@@ -243,11 +243,12 @@ const GRADE_MAPPING_CONFIG = {
 
     // =-=-=-=-=-=-=-=-=-=-=-=-= 更新源配置（Gitee 主源 + GitHub 兜底） =-=-=-=-=-=-=-=-=-=-=-=-=
     // 不依赖 Greasyfork，脚本内通过 Gitee + GitHub 双源检查/下载更新。
-    // Gitee 仓库创建完成后，请填写 GITEE_REPO（格式：用户名/仓库名）。
+    // 注意：Gitee 与 GitHub 分支可能不同（此处 Gitee=master、GitHub=main）。
     const UPDATE_SOURCES = {
-        GITEE_REPO: '{GITEE_USER}/{GITEE_REPO}',  // TODO: 待填写 Gitee 仓库，如 'zengzoxiong/aoxiang-jwxt-enhance'
+        GITEE_REPO: 'leamloli/aoxiang-jwxt-enhance',
+        GITEE_BRANCH: 'master',
         GITHUB_REPO: 'zengzoxiong/aoxiang-jwxt-enhance',
-        BRANCH: 'main',
+        GITHUB_BRANCH: 'main',
         USER_FILE: 'aoxiang-jwxt-enhance.user.js',
         META_FILE: 'aoxiang-jwxt-enhance.meta.js'
     };
@@ -261,8 +262,8 @@ const GRADE_MAPPING_CONFIG = {
             // 双源检查：Gitee 主源（国内直连快）优先，GitHub raw 兜底
             const src = UPDATE_SOURCES;
             const urlsToTry = [
-                `https://gitee.com/${src.GITEE_REPO}/raw/${src.BRANCH}/${src.META_FILE}?t=` + Date.now(),
-                `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.BRANCH}/${src.META_FILE}?t=` + Date.now()
+                `https://gitee.com/${src.GITEE_REPO}/raw/${src.GITEE_BRANCH}/${src.META_FILE}?t=` + Date.now(),
+                `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.GITHUB_BRANCH}/${src.META_FILE}?t=` + Date.now()
             ];
 
             let currentTry = 0;
@@ -382,8 +383,8 @@ const GRADE_MAPPING_CONFIG = {
                 // 双源直连拉取完整脚本：Gitee 主源（国内快）优先，GitHub raw 兜底
                 const src = UPDATE_SOURCES;
                 const scriptUrls = [
-                    `https://gitee.com/${src.GITEE_REPO}/raw/${src.BRANCH}/${src.USER_FILE}?t=` + Date.now(),
-                    `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.BRANCH}/${src.USER_FILE}?t=` + Date.now()
+                    `https://gitee.com/${src.GITEE_REPO}/raw/${src.GITEE_BRANCH}/${src.USER_FILE}?t=` + Date.now(),
+                    `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.GITHUB_BRANCH}/${src.USER_FILE}?t=` + Date.now()
                 ];
 
                 const downloadFrom = (index) => {

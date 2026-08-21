@@ -22,6 +22,6 @@
 // @require      https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @homepage     https://github.com/zengzoxiong/aoxiang-jwxt-enhance
-// @downloadURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.user.js
-// @updateURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.meta.js
+// @downloadURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.user.js
+// @updateURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.meta.js
 // ==/UserScript==
