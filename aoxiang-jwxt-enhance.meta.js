@@ -15,6 +15,7 @@
 // @grant        unsafeWindow
 // @connect      electronic-signature.nwpu.edu.cn
 // @connect      gitee.com
+// @connect      raw.giteeusercontent.com
 // @connect      raw.githubusercontent.com
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=nwpu.edu.cn
