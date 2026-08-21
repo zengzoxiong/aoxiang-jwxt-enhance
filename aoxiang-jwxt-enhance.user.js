@@ -3253,10 +3253,57 @@ const GRADE_MAPPING_CONFIG = {
     }
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.6 课程关注 =-=-=-=-=-=-=-=-=-=-=-=-=
     /**
-     * 将表格行中的教师姓名转换为可点击的教师主页搜索链接
-     * @description 拆分教师名（多教师用换行/<br>分隔），每个名字包装为独立可点击元素
+     * 将表格行中的教师姓名转换为可点击的教师主页搜索链接【旧版模式】
+     * @description 全校开课查询使用：拆分教师名并直接给每个名字绑定 onclick 跳转
      */
     function enhanceTeacherNames(row) {
+        if (!document.getElementById('gm-teacher-link-style')) {
+            const style = document.createElement('style');
+            style.id = 'gm-teacher-link-style';
+            style.textContent = `
+            .gm-teacher-link { color: #409EFF !important; text-decoration: none; font-weight: bold; transition: all 0.2s; cursor: pointer; }
+            .gm-teacher-link:hover { color: #0056b3 !important; text-decoration: underline; background-color: rgba(64,158,255,0.1); border-radius: 4px; padding: 2px 4px; }
+        `;
+            document.head.appendChild(style);
+        }
+
+        const teacherEl = row.querySelector('.course-teacher');
+        if (!teacherEl || teacherEl.dataset.gmLinked === "true") return;
+
+        const rawText = teacherEl.innerText.trim();
+        if (!rawText || rawText === '待定' || rawText === '-') return;
+
+        teacherEl.dataset.gmLinked = "true";
+        teacherEl.innerHTML = ''; // 清空原文本
+
+        // 按空格、逗号、分号拆分多个教师（\s 同时兼容换行）
+        const names = rawText.split(/[\s,，;；]+/);
+        names.forEach((name, idx) => {
+            if (!name) return;
+            const a = document.createElement('a');
+            a.className = 'gm-teacher-link';
+            a.textContent = name;
+            a.title = `点击搜索 ${name} 的教师主页`;
+            a.href = "javascript:void(0);";
+            a.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                GM_setValue('gm_cross_search_name', name);
+                window.open('https://teacher.nwpu.edu.cn/search/syss/.html', '_blank');
+            };
+            teacherEl.appendChild(a);
+            // 多个教师时补充空格间隔
+            if (idx < names.length - 1) {
+                teacherEl.appendChild(document.createTextNode(' '));
+            }
+        });
+    }
+
+    /**
+     * 将表格行中的教师姓名转换为可点击的教师主页搜索链接【新版模式】
+     * @description 选课界面使用：生成独立 span 元素，点击由全局事件委托处理
+     */
+    function enhanceTeacherNamesModern(row) {
         if (!document.getElementById('gm-teacher-link-style')) {
             const style = document.createElement('style');
             style.id = 'gm-teacher-link-style';
@@ -3270,8 +3317,7 @@ const GRADE_MAPPING_CONFIG = {
         }
 
         const teacherEl = row.querySelector('.course-teacher');
-        if (!teacherEl) return;
-        if (teacherEl.dataset.gmLinked === "true") return;
+        if (!teacherEl || teacherEl.dataset.gmLinked === "true") return;
 
         const rawText = teacherEl.innerText.trim();
         if (!rawText || rawText === '待定' || rawText === '-') return;
@@ -3283,7 +3329,7 @@ const GRADE_MAPPING_CONFIG = {
         const sourceText = teacherEl.getAttribute('data-text') || teacherEl.innerText;
         const names = sourceText
             .replace(/<br\s*\/?>/gi, '\n')
-            .split(/[\n、,，]+/)
+            .split(/[\s,，;；]+/)
             .map(s => s.trim())
             .filter(Boolean);
         if (names.length === 0) return;
@@ -3298,6 +3344,21 @@ const GRADE_MAPPING_CONFIG = {
             span.title = `搜索教师「${name}」的主页`;
             teacherEl.appendChild(span);
             if (idx < names.length - 1) teacherEl.appendChild(document.createElement('br'));
+        });
+    }
+
+    // 【全局】教师主页搜索点击事件委托（覆盖选课界面等使用新版 span 的位置，仅绑定一次）
+    if (!window._gm_teacher_link_bound) {
+        window._gm_teacher_link_bound = true;
+        document.addEventListener('click', function (e) {
+            const nameEl = e.target.closest('.gm-teacher-name');
+            if (!nameEl) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const name = nameEl.dataset.name || nameEl.textContent.trim();
+            if (!name || name === '待定' || name === '-') return;
+            GM_setValue('gm_cross_search_name', name);
+            window.open('https://teacher.nwpu.edu.cn/search/syss/.html', '_blank');
         });
     }
 
@@ -3443,29 +3504,6 @@ const GRADE_MAPPING_CONFIG = {
     function initLessonSearchPage() {
         if (!ConfigManager.enableCourseWatch) return;
         Logger.log("2.6", "已进入全校开课查询页面 (Iframe)");
-
-        // 【修复】全局点击事件委托：点击教师姓名 → 跳转教师主页搜索（仅绑定一次）
-        if (!window._gm_teacher_link_bound) {
-            window._gm_teacher_link_bound = true;
-            document.addEventListener('click', function (e) {
-                const nameEl = e.target.closest('.gm-teacher-name');
-                const teacherEl = e.target.closest('.course-teacher.gm-teacher-enhanced');
-                if (!nameEl && !teacherEl) return;
-                e.preventDefault();
-                e.stopPropagation();
-                // 优先取命中的具体教师名，否则兜底取第一个教师名
-                let name = '';
-                if (nameEl) {
-                    name = nameEl.dataset.name || nameEl.textContent.trim();
-                } else {
-                    name = (teacherEl.innerText.replace(/\s+/g, ' ').trim().split(/[\s、,，]+/)[0]) || '';
-                }
-                if (!name || name === '待定' || name === '-') return;
-                // 写入待搜索教师名，新标签页打开教师主页后自动搜索
-                GM_setValue('gm_cross_search_name', name);
-                window.open('https://teacher.nwpu.edu.cn/search', '_blank');
-            });
-        }
 
         // 初始执行一次
         injectFollowButtons();
@@ -3752,7 +3790,7 @@ const GRADE_MAPPING_CONFIG = {
             // ==============================================================================
 
             function processRowWithCode(row, mode) {
-                enhanceTeacherNames(row);
+                enhanceTeacherNamesModern(row); // 选课界面使用新版模式
 
                 let courseCode = null;
                 // 1. 尝试获取课程代码
