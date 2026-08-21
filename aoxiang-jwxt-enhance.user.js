@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.7.9
+// @version      1.8.0
 // @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
@@ -14,17 +14,16 @@
 // @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
 // @connect      electronic-signature.nwpu.edu.cn
-// @connect      update.greasyfork.org
-// @connect      api.codetabs.com
-// @connect      api.allorigins.win
+// @connect      gitee.com
+// @connect      raw.githubusercontent.com
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=nwpu.edu.cn
 // @run-at       document-start
 // @require      https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @homepage     https://greasyfork.org/zh-CN/scripts/524099-%E7%BF%B1%E7%BF%94%E6%95%99%E5%8A%A1%E5%8A%9F%E8%83%BD%E5%8A%A0%E5%BC%BA
-// @downloadURL https://update.greasyfork.org/scripts/524099/%E7%BF%B1%E7%BF%94%E6%95%99%E5%8A%A1%E5%8A%9F%E8%83%BD%E5%8A%A0%E5%BC%BA.user.js
-// @updateURL https://update.greasyfork.org/scripts/524099/%E7%BF%B1%E7%BF%94%E6%95%99%E5%8A%A1%E5%8A%9F%E8%83%BD%E5%8A%A0%E5%BC%BA.meta.js
+// @homepage     https://github.com/zengzoxiong/aoxiang-jwxt-enhance
+// @downloadURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.user.js
+// @updateURL https://gitee.com/{GITEE_USER}/{GITEE_REPO}/raw/main/aoxiang-jwxt-enhance.meta.js
 // ==/UserScript==
 
 // ==================== 用户可配置区域 ====================
@@ -151,7 +150,7 @@ const GRADE_MAPPING_CONFIG = {
                 links: [
                     { name: "湖畔资料", url: "http://nwpushare.fun", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>' },
                     { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' },
-                    { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#fd47ec", color: "#26A23C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' }
+                    { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' }
                 ]
             },
             {
@@ -242,17 +241,28 @@ const GRADE_MAPPING_CONFIG = {
         show: function () { this.initModal(); document.getElementById('gm-friendly-links-modal').style.display = 'flex'; }
     };
 
+    // =-=-=-=-=-=-=-=-=-=-=-=-= 更新源配置（Gitee 主源 + GitHub 兜底） =-=-=-=-=-=-=-=-=-=-=-=-=
+    // 不依赖 Greasyfork，脚本内通过 Gitee + GitHub 双源检查/下载更新。
+    // Gitee 仓库创建完成后，请填写 GITEE_REPO（格式：用户名/仓库名）。
+    const UPDATE_SOURCES = {
+        GITEE_REPO: '{GITEE_USER}/{GITEE_REPO}',  // TODO: 待填写 Gitee 仓库，如 'zengzoxiong/aoxiang-jwxt-enhance'
+        GITHUB_REPO: 'zengzoxiong/aoxiang-jwxt-enhance',
+        BRANCH: 'main',
+        USER_FILE: 'aoxiang-jwxt-enhance.user.js',
+        META_FILE: 'aoxiang-jwxt-enhance.meta.js'
+    };
+
     // --- 版本检查器 ---
     const UpdateChecker = {
         check: function (auto = false) {
             const btnText = document.getElementById('gm-update-text');
             if (!auto && btnText) btnText.innerHTML = "正在检查更新...";
 
-            const metaUrl = 'https://update.greasyfork.org/scripts/524099/%E7%BF%B1%E7%BF%94%E6%95%99%E5%8A%A1%E5%8A%9F%E8%83%BD%E5%8A%A0%E5%BC%BA.meta.js?t=' + Date.now();
+            // 双源检查：Gitee 主源（国内直连快）优先，GitHub raw 兜底
+            const src = UPDATE_SOURCES;
             const urlsToTry = [
-                metaUrl,
-                `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(metaUrl)}`,
-                `https://api.allorigins.win/raw?url=${encodeURIComponent(metaUrl)}`
+                `https://gitee.com/${src.GITEE_REPO}/raw/${src.BRANCH}/${src.META_FILE}?t=` + Date.now(),
+                `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.BRANCH}/${src.META_FILE}?t=` + Date.now()
             ];
 
             let currentTry = 0;
@@ -317,7 +327,7 @@ const GRADE_MAPPING_CONFIG = {
                 脚本更新指引
             </h3>
             <p style="color:#606266; font-size:14px; margin-bottom:20px; line-height:1.6; text-align:left;">
-                由于更新源在国内访问受限，直接点击更新可能失败。<br>推荐使用<b>国内直连下载</b>，手动完成更新：
+                点击下方按钮可从<b>Gitee / GitHub</b>双源下载最新版脚本，<br>下载后<b>拖拽到当前浏览器网页</b>中即可完成更新：
             </p>
             <div style="display:flex; flex-direction:column; gap:12px;">
                 <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:bold; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
@@ -334,7 +344,7 @@ const GRADE_MAPPING_CONFIG = {
                 <div style="display:flex; gap:10px; margin-top:5px;">
                     <button id="gm-update-btn-direct" style="flex:1; background:#f4f4f5; color:#606266; border:1px solid #dcdfe6; padding:10px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
                         <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                        尝试访问greasyfork
+                        访问 GitHub 仓库
                     </button>
                     <button id="gm-update-btn-close" style="flex:1; background:#fff; color:#909399; border:1px solid #e4e7ed; padding:10px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s;">
                         稍后更新
@@ -348,7 +358,7 @@ const GRADE_MAPPING_CONFIG = {
 
             document.getElementById('gm-update-btn-close').onclick = () => overlay.remove();
             document.getElementById('gm-update-btn-direct').onclick = () => {
-                window.open('https://greasyfork.org/zh-CN/scripts/524099', '_blank');
+                window.open('https://github.com/' + UPDATE_SOURCES.GITHUB_REPO, '_blank');
                 overlay.remove();
             };
 
@@ -369,41 +379,49 @@ const GRADE_MAPPING_CONFIG = {
                 proxyBtn.disabled = true;
                 proxyBtn.style.opacity = '0.7';
 
-                const scriptUrl = 'https://update.greasyfork.org/scripts/524099/%E7%BF%B1%E7%BF%94%E6%95%99%E5%8A%A1%E5%8A%9F%E8%83%BD%E5%8A%A0%E5%BC%BA.user.js';
-                const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(scriptUrl)}`;
+                // 双源直连拉取完整脚本：Gitee 主源（国内快）优先，GitHub raw 兜底
+                const src = UPDATE_SOURCES;
+                const scriptUrls = [
+                    `https://gitee.com/${src.GITEE_REPO}/raw/${src.BRANCH}/${src.USER_FILE}?t=` + Date.now(),
+                    `https://raw.githubusercontent.com/${src.GITHUB_REPO}/${src.BRANCH}/${src.USER_FILE}?t=` + Date.now()
+                ];
 
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url: proxyUrl,
-                    onload: (res) => {
-                        if (res.status === 200 && res.responseText.includes('==/UserScript==')) {
-                            const blob = new Blob([res.responseText], { type: 'text/javascript' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = '翱翔教务功能加强.user.js';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-
-                            proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>下载完成！请按下方提示操作';
-                            proxyBtn.style.background = "#67C23A";
-                            tipBox.style.display = "block";
-                        } else {
-                            proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>拉取失败，请重试或尝试原网页';
-                            proxyBtn.style.background = "#F56C6C";
-                            proxyBtn.disabled = false;
-                            proxyBtn.style.opacity = '1';
-                        }
-                    },
-                    onerror: () => {
-                        proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>网络错误，请重试';
+                const downloadFrom = (index) => {
+                    if (index >= scriptUrls.length) {
+                        proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>拉取失败，请检查网络后重试';
                         proxyBtn.style.background = "#F56C6C";
                         proxyBtn.disabled = false;
                         proxyBtn.style.opacity = '1';
+                        return;
                     }
-                });
+                    GM_xmlhttpRequest({
+                        method: 'GET',
+                        url: scriptUrls[index],
+                        timeout: 8000,
+                        onload: (res) => {
+                            if (res.status === 200 && res.responseText.includes('==/UserScript==')) {
+                                const blob = new Blob([res.responseText], { type: 'text/javascript' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'aoxiang-jwxt-enhance.user.js';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+
+                                proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>下载完成！请按下方提示操作';
+                                proxyBtn.style.background = "#67C23A";
+                                tipBox.style.display = "block";
+                            } else {
+                                downloadFrom(index + 1);
+                            }
+                        },
+                        onerror: () => downloadFrom(index + 1),
+                        ontimeout: () => downloadFrom(index + 1)
+                    });
+                };
+                downloadFrom(0);
             };
         }
     };
@@ -455,15 +473,32 @@ const GRADE_MAPPING_CONFIG = {
         catch (error) { Logger.error('Core', "缓存写入失败", error); }
     }
 
+    // 模块级 StudentID 内存缓存（生命周期：当前页面关闭前持续有效）
+    let cachedStudentId = null;
+    // 进行中的获取请求（用于并发去重，避免同一页面多次重复请求）
+    let studentIdPromise = null;
+
     /**
-     * 获取学生ID
+     * 获取学生ID（带内存缓存，主页面初次加载即预取，后续调用复用）
      * @description 从课程表页面 HTML 中解析 dataId 作为学生ID
+     * @param {Object} [options] 选项
+     * @param {boolean} [options.force=false] 是否强制重新获取（跳过缓存），学生画像页使用
      * @returns {Promise<string|null>} 学生ID或null
      */
-    async function getStudentId() {
+    async function getStudentId(options = {}) {
+        // 非强制模式下，优先复用内存缓存，避免重复请求
+        if (!options.force && cachedStudentId) {
+            Logger.log('Core', `复用缓存 StudentID: ${cachedStudentId}`);
+            return cachedStudentId;
+        }
+        // 非强制模式下，复用正在进行的获取请求，防止并发重复获取
+        if (!options.force && studentIdPromise) {
+            return studentIdPromise;
+        }
+
         Logger.log('Core', "正在获取 StudentID...");
 
-        return new Promise((resolve) => {
+        const fetchPromise = new Promise((resolve) => {
             const courseTableUrl = "https://jwxt.nwpu.edu.cn/student/for-std/course-table";
 
             GM_xmlhttpRequest({
@@ -482,6 +517,8 @@ const GRADE_MAPPING_CONFIG = {
                             if (dataIdMatch && dataIdMatch[1]) {
                                 const sid = dataIdMatch[1];
                                 Logger.log('Core', `解析成功，StudentID (dataId): ${sid}`);
+                                // 写入内存缓存，当前页面关闭前持续生效
+                                cachedStudentId = sid;
                                 // 写入 localStorage，兼容选课助手功能
                                 localStorage.setItem('cs-course-select-student-id', sid);
                                 resolve(sid);
@@ -504,15 +541,28 @@ const GRADE_MAPPING_CONFIG = {
                 }
             });
         });
+
+        // 强制模式下不参与去重，直接返回
+        if (options.force) {
+            return fetchPromise;
+        }
+
+        // 非强制模式：记录进行中的请求供并发复用，完成后清除
+        studentIdPromise = fetchPromise;
+        try {
+            return await fetchPromise;
+        } finally {
+            studentIdPromise = null;
+        }
     }
 
     /**
      * 从后端抓取所有成绩数据并缓存
      */
-    async function fetchAllDataAndCache(retryCount = 0) {
+    async function fetchAllDataAndCache(retryCount = 0, options = {}) {
         Logger.log("Initial", "开始获取并缓存所有教务数据");
         try {
-            const studentId = await getStudentId();
+            const studentId = await getStudentId(options);
             const [gpaRes, semRes, rankRes] = await Promise.all([
                 new Promise(r => GM_xmlhttpRequest({ method: "GET", url: `https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getMyGpa?studentAssoc=${studentId}`, onload: r, onerror: () => r({ status: 500 }) })),
                 new Promise(r => GM_xmlhttpRequest({ method: "GET", url: `https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getMyGrades?studentAssoc=${studentId}&semesterAssoc=`, onload: r, onerror: () => r({ status: 500 }) })),
@@ -531,7 +581,8 @@ const GRADE_MAPPING_CONFIG = {
                 if (retryCount < 1) { // 仅允许重试一次，防止死循环
                     Logger.warn("Core", "检测到请求无效，准备重试...");
                     localStorage.removeItem('cs-course-select-student-id');
-                    return await fetchAllDataAndCache(retryCount + 1);
+                    cachedStudentId = null; // 清除内存缓存，确保重试时重新获取
+                    return await fetchAllDataAndCache(retryCount + 1, options);
                 } else {
                     throw new Error("多次请求均无效，请检查登录状态。");
                 }
@@ -854,6 +905,9 @@ const GRADE_MAPPING_CONFIG = {
         createFloatingMenu(isEcampus); // 传入当前环境标志
 
         if (isEcampus) return;
+
+        // 主页面初次加载即预取 StudentID，供本页面所有功能复用（悬浮球同步、后台静默同步等），生命周期持续到页面关闭
+        getStudentId().catch(err => Logger.error('Core', 'StudentID 预取失败', err));
 
         initExportUI();
         initScheduleWidget();
@@ -1196,15 +1250,17 @@ const GRADE_MAPPING_CONFIG = {
             return;
         }
 
-        // --- 2. 显示遮罩 ---
+        // --- 2. 显示遮罩（与全校开课查询中的同步遮罩风格一致） ---
         const overlay = document.createElement('div');
         overlay.id = 'gm-sync-overlay';
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100000; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
-        overlay.innerHTML =
-            '<div style=”font-size:24px; font-weight:bold; margin-bottom:15px;”>正在同步选课数据...</div>' +
-            '<div id=”gm-overlay-status” style=”font-size:16px; margin-bottom:10px; color:#ddd;”>正在初始化...</div>' +
-            '<div style=”font-size:18px;”>已获取: <span id=”gm-sync-count” style=”color:#4facfe; font-weight:bold;”>0</span> 条</div>' +
-            '<div style=”margin-top:30px; color:#aaa; font-size:14px;”>请勿关闭页面</div>';
+        overlay.innerHTML = `
+            <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步选课数据...</div>
+            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新有数据的学期...</div>
+            <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
+            <div style="font-size:18px;">已获取: <span id="gm-sync-count" style="color:#4facfe; font-weight:bold;">0</span> 条</div>
+            <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
+        `;
         document.body.appendChild(overlay);
 
         const updateStatus = (text) => {
@@ -1214,6 +1270,10 @@ const GRADE_MAPPING_CONFIG = {
         const updateCount = (count) => {
             const el = document.getElementById('gm-sync-count');
             if (el) el.innerText = count;
+        };
+        const updateTargetSem = (text) => {
+            const el = document.getElementById('gm-overlay-target-sem');
+            if (el) el.innerText = text;
         };
 
         try {
@@ -1242,58 +1302,39 @@ const GRADE_MAPPING_CONFIG = {
                 });
             };
 
-            // --- 4. 获取学期列表（通过iframe加载页面后提取） ---
+            // --- 4. 通过API获取学期列表 ---
             updateStatus('正在获取学期列表...');
-            const semesterOptions = await new Promise((resolve) => {
-                var iframe = document.createElement('iframe');
-                iframe.src = 'https://jwxt.nwpu.edu.cn/student/for-std/lesson-search';
-                iframe.style.cssText = 'position:fixed; left:-9999px; width:1px; height:1px; opacity:0;';
-                document.body.appendChild(iframe);
-
-                var resolved = false;
-                var timeout = setTimeout(function() {
-                    if (!resolved) { resolved = true; iframe.remove(); resolve([]); }
-                }, 15000);
-
-                iframe.onload = function() {
-                    var retries = 0;
-                    var checkInterval = setInterval(function() {
-                        retries++;
+            const semesterOptions = await new Promise((resolve, reject) => {
+                const url = '/student/for-std/lesson-search/index/' + studentId;
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', url);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
                         try {
-                            var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                            var semesterEl = iframeDoc.getElementById('semester');
-                            var options = [];
-
-                            if (semesterEl && semesterEl.selectize) {
-                                var opts = semesterEl.selectize.options;
-                                Object.values(opts).forEach(function(o) {
-                                    if (o.value) options.push({ value: o.value, text: o.text || o.nameZh });
-                                });
-                            }
-
-                            if (options.length === 0) {
-                                var dropdownOpts = iframeDoc.querySelectorAll('.selectize-dropdown-content .option');
-                                dropdownOpts.forEach(function(opt) {
-                                    var val = opt.getAttribute('data-value');
-                                    var text = opt.innerText.trim();
-                                    if (val && text && text !== '...') options.push({ value: val, text: text });
-                                });
-                            }
-
-                            if (options.length > 1 || retries > 30) {
-                                clearInterval(checkInterval);
-                                clearTimeout(timeout);
-                                if (!resolved) { resolved = true; iframe.remove(); resolve(options); }
-                            }
+                            const html = xhr.responseText;
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+                            const options = doc.querySelectorAll('#semester option[value]');
+                            const semesterList = [];
+                            options.forEach(opt => {
+                                const val = opt.getAttribute('value');
+                                const text = opt.textContent.trim();
+                                if (val && text && val !== '') {
+                                    semesterList.push({ value: val, text: text });
+                                }
+                            });
+                            resolve(semesterList);
                         } catch (e) {
-                            if (retries > 30) {
-                                clearInterval(checkInterval);
-                                clearTimeout(timeout);
-                                if (!resolved) { resolved = true; iframe.remove(); resolve([]); }
-                            }
+                            reject(new Error('HTML解析失败: ' + e.message));
                         }
-                    }, 500);
+                    } else {
+                        reject(new Error('请求失败: HTTP ' + xhr.status));
+                    }
                 };
+                xhr.onerror = function () {
+                    reject(new Error('网络请求失败'));
+                };
+                xhr.send();
             });
 
             if (semesterOptions.length === 0) {
@@ -1315,6 +1356,8 @@ const GRADE_MAPPING_CONFIG = {
                     if (testData && testData.data && testData.data.length > 0) {
                         targetSemesterId = opt.value;
                         targetSemesterName = opt.text;
+                        // 更新遮罩中锁定的抓取学期（与全校开课查询风格一致）
+                        updateTargetSem('锁定抓取学期: ' + targetSemesterName);
                         Logger.log('Sync', '找到有数据的学期: ' + opt.text);
                         break;
                     }
@@ -1338,10 +1381,11 @@ const GRADE_MAPPING_CONFIG = {
             const timestamp = new Date().toLocaleString('zh-CN', { hour12: false });
 
             // 解析课程数据
+            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
             const parseCourseData = (courses) => courses.map(course => ({
                 id: String(course.id),
                 code: course.code || 'N/A',
-                name: course.nameZh || course.course?.nameZh || 'N/A',
+                name: course.course?.nameZh || course.nameZh || 'N/A',
                 stdCount: course.stdCount || 0,
                 limitCount: course.limitCount || 0,
                 time: timestamp
@@ -1352,7 +1396,7 @@ const GRADE_MAPPING_CONFIG = {
 
             // 并行请求剩余页
             if (totalPages > 1) {
-                updateStatus('正在并行获取剩余 ' + (totalPages - 1) + ' 页...');
+                updateStatus('正在获取剩余 ' + (totalPages - 1) + ' 页...');
                 const pagePromises = [];
                 for (let page = 2; page <= totalPages; page++) {
                     pagePromises.push(fetchCoursePage(targetSemesterId, page, PAGE_SIZE));
@@ -2760,7 +2804,8 @@ const GRADE_MAPPING_CONFIG = {
         renderAllComponents();
 
         // 2. 异步请求数据不阻塞主线程，一旦完成，延后 100ms（避开Vue更新冲突）执行热更新
-        fetchAllDataAndCache().then(freshData => {
+        // 学生画像页单独强制重新获取 StudentID，不依赖主页面缓存
+        fetchAllDataAndCache(0, { force: true }).then(freshData => {
             currentData = freshData;
             currentWeightedScores = precomputeAllWeightedScores(freshData.allGrades);
             setTimeout(triggerHotUpdate, 150);
@@ -2814,63 +2859,61 @@ const GRADE_MAPPING_CONFIG = {
             this.injectControlPanel();
             this.renderHistoryTags();
 
-            // 定时器智能提取学期列表：等待原网页 AJAX 加载完毕
-            let retryCount = 0;
-            const populateTimer = setInterval(() => {
-                retryCount++;
-                const gmSelect = document.getElementById('gm-sync-semester');
-                if (!gmSelect) {
-                    clearInterval(populateTimer);
-                    return;
-                }
-
-                let extractedOptions = [];
-                try {
-                    const selectEl = document.getElementById('semester');
-                    if (selectEl && selectEl.selectize && selectEl.selectize.options) {
-                        const opts = selectEl.selectize.options;
-                        extractedOptions = Object.values(opts).map(o => ({ value: o.value, text: o.text || o.nameZh }));
-                    } else if (typeof unsafeWindow !== 'undefined' && unsafeWindow.$) {
-                        const jqEl = unsafeWindow.$('#semester');
-                        if (jqEl.length > 0 && jqEl[0].selectize && jqEl[0].selectize.options) {
-                            const opts = jqEl[0].selectize.options;
-                            extractedOptions = Object.values(opts).map(o => ({ value: o.value, text: o.text || o.nameZh }));
-                        }
-                    }
-                } catch (e) { }
-
-                if (extractedOptions.length === 0) {
-                    const domOptions = document.querySelectorAll('.selectize-dropdown.semester .option');
-                    domOptions.forEach(opt => {
-                        const val = opt.getAttribute('data-value');
-                        const text = opt.innerText.trim();
-                        if (val && text) extractedOptions.push({ value: val, text: text });
+            // 通过API获取学期列表
+            const gmSelect = document.getElementById('gm-sync-semester');
+            if (gmSelect && this.CONFIG.STUDENT_ID) {
+                const fetchSemesterList = () => {
+                    return new Promise((resolve, reject) => {
+                        const url = '/student/for-std/lesson-search/index/' + this.CONFIG.STUDENT_ID;
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', url);
+                        xhr.onload = function () {
+                            if (xhr.status === 200) {
+                                try {
+                                    const html = xhr.responseText;
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(html, 'text/html');
+                                    const options = doc.querySelectorAll('#semester option[value]');
+                                    const semesterList = [];
+                                    options.forEach(opt => {
+                                        const val = opt.getAttribute('value');
+                                        const text = opt.textContent.trim();
+                                        if (val && text && val !== '') {
+                                            semesterList.push({ value: val, text: text });
+                                        }
+                                    });
+                                    resolve(semesterList);
+                                } catch (e) {
+                                    reject(new Error('HTML解析失败: ' + e.message));
+                                }
+                            } else {
+                                reject(new Error('请求失败: HTTP ' + xhr.status));
+                            }
+                        };
+                        xhr.onerror = function () {
+                            reject(new Error('网络请求失败'));
+                        };
+                        xhr.send();
                     });
-                }
+                };
 
-                const uniqueOptions = [];
-                const seenVals = new Set();
-                extractedOptions.forEach(opt => {
-                    if (!seenVals.has(opt.value) && opt.text && opt.text !== 'undefined') {
-                        seenVals.add(opt.value);
-                        uniqueOptions.push(opt);
+                fetchSemesterList().then(semesterOptions => {
+                    if (semesterOptions.length > 0) {
+                        semesterOptions.sort((a, b) => parseInt(b.value) - parseInt(a.value));
+                        let optionsHtml = '';
+                        semesterOptions.forEach(opt => {
+                            optionsHtml += `<option value="${opt.value}">${opt.text}</option>`;
+                        });
+                        gmSelect.innerHTML = optionsHtml;
+                        this.syncSemesterSelect();
+                    } else {
+                        gmSelect.innerHTML = '<option value="">未找到学期数据</option>';
                     }
-                });
-
-                if (uniqueOptions.length > 1) {
-                    uniqueOptions.sort((a, b) => parseInt(b.value) - parseInt(a.value));
-                    let optionsHtml = '';
-                    uniqueOptions.forEach(opt => {
-                        optionsHtml += `<option value="${opt.value}">${opt.text}</option>`;
-                    });
-                    gmSelect.innerHTML = optionsHtml;
-                    this.syncSemesterSelect();
-                    clearInterval(populateTimer);
-                } else if (retryCount > 40) {
+                }).catch(e => {
+                    Logger.error("2.5", "API获取学期列表失败: " + e.message);
                     gmSelect.innerHTML = '<option value="">加载失败，请刷新页面重试</option>';
-                    clearInterval(populateTimer);
-                }
-            }, 500);
+                });
+            }
 
             // 启动观察者，页面数据更新时同步历史标签和下拉框学期
             const observer = new MutationObserver(() => {
@@ -3029,7 +3072,7 @@ const GRADE_MAPPING_CONFIG = {
 
                 // 如果有更多页，并行请求剩余所有页
                 if (totalPages > 1) {
-                    this.updateOverlayStatus(`正在并行获取剩余 ${totalPages - 1} 页...`);
+                    this.updateOverlayStatus(`正在获取剩余 ${totalPages - 1} 页...`);
                     const pagePromises = [];
                     for (let page = 2; page <= totalPages; page++) {
                         pagePromises.push(this.fetchCoursePage(targetSemesterId, page, pageSize));
@@ -3093,10 +3136,11 @@ const GRADE_MAPPING_CONFIG = {
         // --- 解析 API 返回的课程数据 ---
         parseCourseData(courses, semesterName) {
             const timestamp = new Date().toLocaleString('zh-CN', { hour12: false });
+            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
             return courses.map(course => ({
                 id: String(course.id),
                 code: course.code || 'N/A',
-                name: course.nameZh || course.course?.nameZh || 'N/A',
+                name: course.course?.nameZh || course.nameZh || 'N/A',
                 stdCount: course.stdCount || 0,
                 limitCount: course.limitCount || 0,
                 time: timestamp
@@ -3851,8 +3895,36 @@ const GRADE_MAPPING_CONFIG = {
     const BackgroundSyncSystem = {
         WORKER_NAME: 'gm_bg_sync_worker_frame',
 
+        /**
+         * 数据迁移：清理旧版字段映射错误的后台同步数据
+         * @description 旧版 parseCourseData 把班级范围名（"全校"）存进了 name、把 scheduleText 对象存进了 timeAndPlace。
+         * 通过检测 timeAndPlace 是否为对象来判断是否为旧版脏数据，清除后本次页面会自动重新同步。
+         */
+        migrateStaleBackgroundData() {
+            try {
+                const bgRaw = GM_getValue(CONSTANTS.BACKGROUND_SYNC_KEY, '');
+                if (!bgRaw) return;
+                const bg = JSON.parse(bgRaw);
+                // 旧版数据特征：timeAndPlace 为对象（scheduleText 对象），或 name 为班级范围名"全校"
+                const isStale = Array.isArray(bg) && bg.some(c =>
+                    (c && typeof c.timeAndPlace === 'object') || (c && c.name === '全校')
+                );
+                if (isStale) {
+                    Logger.log("2.8", "检测到旧版后台同步数据字段错位，已清除，等待重新同步");
+                    GM_setValue(CONSTANTS.BACKGROUND_SYNC_KEY, '');
+                    GM_setValue(CONSTANTS.LAST_SYNC_TIME_KEY, 0);
+                }
+            } catch (e) {
+                Logger.log("2.8", "后台同步数据迁移检查失败，忽略: " + (e && e.message));
+            }
+        },
+
         // 主控逻辑
-        initController() {
+        async initController() {
+            // 一次性数据迁移：旧版字段映射错误（name 存了班级范围名"全校"、timeAndPlace 存了 scheduleText 对象）
+            // 检测到异常数据则清除后台同步缓存并重置时间戳，触发本次页面立即重新同步
+            this.migrateStaleBackgroundData();
+
             const lastSync = GM_getValue(CONSTANTS.LAST_SYNC_TIME_KEY, 0);
             const now = Date.now();
 
@@ -3870,10 +3942,13 @@ const GRADE_MAPPING_CONFIG = {
             const oldFrame = document.getElementById('gm_bg_sync_frame');
             if (oldFrame) oldFrame.remove();
 
+            // 复用主页面缓存的 StudentID，通过 URL 参数传给 worker，避免 worker 内重复请求
+            const sid = (await getStudentId().catch(() => null)) || '';
+
             const iframe = document.createElement('iframe');
             iframe.id = 'gm_bg_sync_frame';
             iframe.name = this.WORKER_NAME;
-            iframe.src = `https://jwxt.nwpu.edu.cn/student/for-std/lesson-search`;
+            iframe.src = `https://jwxt.nwpu.edu.cn/student/for-std/lesson-search?gmStudentId=${sid}`;
             iframe.style.cssText = `position: fixed; top: 0; left: -15000px; width: 1440px; height: 900px; border: none; visibility: visible; z-index: -100;`;
             document.body.appendChild(iframe);
 
@@ -3903,14 +3978,18 @@ const GRADE_MAPPING_CONFIG = {
             const PAGE_SIZE = 1000; // 使用 queryPage__ 参数格式，服务端支持最大1000条/页
 
             // 解析 API 返回的课程数据
+            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
             const parseCourseData = (courses, semesterName) => {
                 return courses.map(course => ({
                     id: String(course.id),
                     code: course.code || '',
-                    name: course.nameZh || course.course?.nameZh || '',
+                    name: course.course?.nameZh || course.nameZh || course.nameEn || '',
                     teachers: course.teacherAssignmentStr || '待定',
-                    credits: course.course?.credit || '',
-                    timeAndPlace: course.scheduleText || '详见课表',
+                    credits: course.course?.credits || course.course?.credit || '',
+                    // scheduleText 是嵌套对象，取 dateTimePlaceText.textZh（时间+地点）作为显示文本
+                    timeAndPlace: course.scheduleText?.dateTimePlaceText?.textZh
+                        || course.scheduleText?.dateTimePlacePersonText?.textZh
+                        || '详见课表',
                     stdCount: course.stdCount || 0,
                     limitCount: course.limitCount || 0,
                     semester: semesterName,
@@ -3921,8 +4000,9 @@ const GRADE_MAPPING_CONFIG = {
             // 自动化执行流程
             const runAutomation = async () => {
                 try {
-                    // 通过函数获取学生ID
-                    const studentId = await getStudentId();
+                    // 优先复用主页面传入的 StudentID（URL 参数），否则重新获取
+                    const sidFromUrl = new URLSearchParams(window.location.search).get('gmStudentId');
+                    const studentId = sidFromUrl || await getStudentId();
                     if (!studentId) throw new Error('无法获取学生ID');
 
                     // API 请求封装（需要 studentId）
@@ -3950,25 +4030,59 @@ const GRADE_MAPPING_CONFIG = {
                         });
                     };
 
-                    // 等待学期列表加载
-                    let maxRetries = 60;
+                    // 通过API获取学期列表（替代DOM操作）
+                    Logger.log('Sync-Worker', '正在通过API获取学期列表...');
                     let semesterOptions = [];
-                    while (maxRetries > 0) {
-                        const semesterInput = document.querySelector('.selectize-control.semester .selectize-input');
-                        if (semesterInput) {
-                            semesterInput.click();
-                            await sleep(500);
-                            const opts = document.querySelectorAll('.selectize-dropdown-content .option');
-                            opts.forEach(opt => {
-                                const val = opt.getAttribute('data-value');
-                                const text = opt.innerText.trim();
-                                if (val && text) semesterOptions.push({ value: val, text: text });
-                            });
-                            if (semesterOptions.length > 0) break;
-                        }
-                        await sleep(500); maxRetries--;
+
+                    const fetchSemesterList = () => {
+                        return new Promise((resolve, reject) => {
+                            const url = '/student/for-std/lesson-search/index/' + studentId;
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('GET', url);
+                            xhr.onload = function () {
+                                if (xhr.status === 200) {
+                                    try {
+                                        const html = xhr.responseText;
+                                        const parser = new DOMParser();
+                                        const doc = parser.parseFromString(html, 'text/html');
+
+                                        // 解析学期下拉选项
+                                        const options = doc.querySelectorAll('#semester option[value]');
+                                        const semesterList = [];
+                                        options.forEach(opt => {
+                                            const val = opt.getAttribute('value');
+                                            const text = opt.textContent.trim();
+                                            if (val && text && val !== '') {
+                                                semesterList.push({ value: val, text: text });
+                                            }
+                                        });
+
+                                        resolve(semesterList);
+                                    } catch (e) {
+                                        reject(new Error('HTML解析失败: ' + e.message));
+                                    }
+                                } else {
+                                    reject(new Error('请求失败: HTTP ' + xhr.status));
+                                }
+                            };
+                            xhr.onerror = function () {
+                                reject(new Error('网络请求失败'));
+                            };
+                            xhr.send();
+                        });
+                    };
+
+                    try {
+                        semesterOptions = await fetchSemesterList();
+                        Logger.log('Sync-Worker', '获取到 ' + semesterOptions.length + ' 个学期选项');
+                    } catch (e) {
+                        Logger.error('Sync-Worker', 'API获取学期列表失败: ' + e.message);
+                        throw new Error('无法获取学期列表: ' + e.message);
                     }
-                    if (maxRetries <= 0) throw new Error('学期列表加载超时');
+
+                    if (semesterOptions.length === 0) {
+                        throw new Error('未找到任何学期选项');
+                    }
 
                     // ================== 1. 通过API寻找最新有数据的学期 ==================
                     let activeSemesterName = '未知学期';
@@ -4010,7 +4124,7 @@ const GRADE_MAPPING_CONFIG = {
 
                     // 如果有更多页，并行请求剩余所有页
                     if (totalPages > 1) {
-                        Logger.log('Sync-Worker', '正在并行获取剩余 ' + (totalPages - 1) + ' 页...');
+                        Logger.log('Sync-Worker', '正在获取剩余 ' + (totalPages - 1) + ' 页...');
                         const pagePromises = [];
                         for (let page = 2; page <= totalPages; page++) {
                             pagePromises.push(fetchCoursePage(activeSemesterId, page, PAGE_SIZE));
@@ -4022,7 +4136,7 @@ const GRADE_MAPPING_CONFIG = {
                                 allCourseData = allCourseData.concat(parseCourseData(result.data, activeSemesterName));
                             }
                         }
-                        Logger.log('Sync-Worker', '并行获取完成，共 ' + allCourseData.length + ' 条');
+                        Logger.log('Sync-Worker', '获取完成，共 ' + allCourseData.length + ' 条');
                     }
 
                     Logger.log('2.8', '全部完成! 存储 ' + allCourseData.length + ' 条。');
@@ -4135,36 +4249,39 @@ const GRADE_MAPPING_CONFIG = {
 
             /* 单个课程卡片 */
             .gm-pt-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 16px 20px;
+                padding: 14px 20px;
                 border-bottom: 1px solid #f2f4f7;
                 transition: background-color 0.2s;
             }
             .gm-pt-item:last-child { border-bottom: none; }
             .gm-pt-item:hover { background-color: #f0f7ff; }
 
-            /* 左侧信息区 */
-            .gm-pt-info { flex: 1; min-width: 0; padding-right: 15px; }
+            /* 标题行：课程名 + 人数标签 */
+            .gm-pt-title-row {
+                display: flex; justify-content: space-between; align-items: center;
+                margin-bottom: 4px;
+            }
             .gm-pt-title {
                 font-weight: 600; font-size: 15px; color: #303133;
-                margin-bottom: 6px;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                flex: 1; min-width: 0; padding-right: 10px;
             }
-            .gm-pt-code { font-size: 12px; color: #909399; font-family: Consolas, monospace; margin-bottom: 8px; }
+
+            /* 代码行：课程代码 + 关注按钮 */
+            .gm-pt-code-row {
+                display: flex; justify-content: space-between; align-items: center;
+                margin-bottom: 8px;
+            }
+            .gm-pt-code { font-size: 12px; color: #909399; font-family: Consolas, monospace; }
+
+            /* 元信息区：教师、地点 */
             .gm-pt-meta { display: flex; flex-direction: column; gap: 4px; color: #606266; font-size: 13px; }
             .gm-pt-row { display: flex; align-items: center; }
-
-            /* 右侧操作区 */
-            .gm-pt-action {
-                display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0;
-            }
 
             /* 人数胶囊标签 */
             .gm-pt-stat {
                 font-family: Consolas, monospace; font-size: 13px; font-weight: bold;
-                padding: 3px 8px; border-radius: 4px;
+                padding: 3px 8px; border-radius: 4px; flex-shrink: 0;
             }
             .gm-tag-full { color: #F56C6C; background: #fef0f0; border: 1px solid #fde2e2; }
             .gm-tag-avail { color: #67C23A; background: #f0f9eb; border: 1px solid #e1f3d8; }
@@ -4315,28 +4432,32 @@ const GRADE_MAPPING_CONFIG = {
                     const initColor = isFollowed ? '#f56c6c' : '#dcdfe6';
 
                     const teacherText = c.teachers || '待定';
-                    const placeText = c.timeAndPlace || '详见课表';
+                    // 兼容旧版脏数据：timeAndPlace 若为对象（scheduleText），提取时间+地点文本
+                    let placeText = c.timeAndPlace || '详见课表';
+                    if (typeof placeText === 'object') {
+                        placeText = placeText?.dateTimePlaceText?.textZh
+                            || placeText?.dateTimePlacePersonText?.textZh
+                            || '详见课表';
+                    }
 
                     contentHTML += `
                     <div class="gm-pt-item">
-                        <div class="gm-pt-info">
+                        <div class="gm-pt-title-row">
                             <div class="gm-pt-title" title="${c.name}">${c.name}</div>
-                            <div class="gm-pt-code">${c.code}</div>
-                            <div class="gm-pt-meta">
-                                <div class="gm-pt-row">${svgs.user} <span>${teacherText}</span></div>
-                                <div class="gm-pt-row">${svgs.pin} <span>${placeText}</span></div>
-                            </div>
+                            <div class="gm-pt-stat ${countClass}">${c.stdCount}/${c.limitCount}</div>
                         </div>
-                        <div class="gm-pt-action">
-                            <div class="gm-pt-stat ${countClass}">
-                                ${c.stdCount}/${c.limitCount}
-                            </div>
+                        <div class="gm-pt-code-row">
+                            <div class="gm-pt-code">${c.code}</div>
                             <div class="gm-pt-btn ${activeClass}" style="color:${initColor}"
                                  data-id="${c.id}" data-code="${c.code}" data-name="${c.name}"
                                  data-teachers="${teacherText}" data-place="${placeText}"
                                  data-credits="${c.credits || ''}"
                                  data-semester="${c.semester}"
                                  title="${isFollowed ? '取消关注' : '关注此班级'}">❤</div>
+                        </div>
+                        <div class="gm-pt-meta">
+                            <div class="gm-pt-row">${svgs.user} <span>${teacherText}</span></div>
+                            <div class="gm-pt-row">${svgs.pin} <span>${placeText}</span></div>
                         </div>
                     </div>
                 `;

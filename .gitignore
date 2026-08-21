@@ -35,5 +35,8 @@ logs/
 *.tmp
 *.temp
 
-# Claude 中间文件
-.claude/.claude_temp/
+# Claude 文件
+.claude/
+
+# Playwright MCP 测试残留
+.playwright-mcp/
