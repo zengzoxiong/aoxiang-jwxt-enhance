@@ -1,0 +1,39 @@
+# 操作系统文件
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 依赖目录
+node_modules/
+__pycache__/
+venv/
+.venv/
+
+# 构建产物
+dist/
+build/
+*.pyc
+*.pyo
+
+# 环境配置
+.env
+.env.local
+*.env
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+
+# Claude 中间文件
+.claude/.claude_temp/
