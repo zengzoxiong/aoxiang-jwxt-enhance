@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.0
+// @version      1.8.1
 // @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
@@ -93,7 +93,11 @@ const GRADE_MAPPING_CONFIG = {
         LAST_SYNC_TIME_KEY: 'jwxt_last_bg_sync_time',
         HISTORY_STORAGE_KEY: 'course_enrollment_history_auto_sync',
         SYNC_COOLDOWN_MS: 1 * 60 * 60 * 1000, // 1小时冷却
-        GRADES_SNAPSHOT_KEY: 'jwxt_grades_snapshot_v1'//成绩快照存储Key
+        GRADES_SNAPSHOT_KEY: 'jwxt_grades_snapshot_v1',//成绩快照存储Key
+        // 学生画像专用：记录见过的 StudentID（可能多个），用于后台预取加速画像页加载
+        PORTRAIT_STUDENT_IDS_KEY: 'jwxt_portrait_student_ids',
+        // 学生画像专用：跨标签页预取缓存 { studentId, data, time }
+        PORTRAIT_PREFETCH_KEY: 'jwxt_portrait_prefetch_data'
     };
 
     /**
@@ -242,9 +246,7 @@ const GRADE_MAPPING_CONFIG = {
         show: function () { this.initModal(); document.getElementById('gm-friendly-links-modal').style.display = 'flex'; }
     };
 
-    // =-=-=-=-=-=-=-=-=-=-=-=-= 更新源配置（Gitee 主源 + GitHub 兜底） =-=-=-=-=-=-=-=-=-=-=-=-=
-    // 不依赖 Greasyfork，脚本内通过 Gitee + GitHub 双源检查/下载更新。
-    // 注意：Gitee 与 GitHub 分支可能不同（此处 Gitee=master、GitHub=main）。
+    // 更新源配置：Gitee 主源 + GitHub 兜底（分支不同：Gitee=master、GitHub=main）
     const UPDATE_SOURCES = {
         GITEE_REPO: 'leamloli/aoxiang-jwxt-enhance',
         GITEE_BRANCH: 'master',
@@ -260,7 +262,6 @@ const GRADE_MAPPING_CONFIG = {
             const btnText = document.getElementById('gm-update-text');
             if (!auto && btnText) btnText.innerHTML = "正在检查更新...";
 
-            // 双源检查：Gitee 主源（国内直连快）优先，GitHub raw 兜底
             const src = UPDATE_SOURCES;
             const urlsToTry = [
                 `https://gitee.com/${src.GITEE_REPO}/raw/${src.GITEE_BRANCH}/${src.META_FILE}?t=` + Date.now(),
@@ -381,7 +382,6 @@ const GRADE_MAPPING_CONFIG = {
                 proxyBtn.disabled = true;
                 proxyBtn.style.opacity = '0.7';
 
-                // 双源直连拉取完整脚本：Gitee 主源（国内快）优先，GitHub raw 兜底
                 const src = UPDATE_SOURCES;
                 const scriptUrls = [
                     `https://gitee.com/${src.GITEE_REPO}/raw/${src.GITEE_BRANCH}/${src.USER_FILE}?t=` + Date.now(),
@@ -481,19 +481,15 @@ const GRADE_MAPPING_CONFIG = {
     let studentIdPromise = null;
 
     /**
-     * 获取学生ID（带内存缓存，主页面初次加载即预取，后续调用复用）
-     * @description 从课程表页面 HTML 中解析 dataId 作为学生ID
-     * @param {Object} [options] 选项
-     * @param {boolean} [options.force=false] 是否强制重新获取（跳过缓存），学生画像页使用
-     * @returns {Promise<string|null>} 学生ID或null
+     * 获取学生ID（带内存缓存）
+     * @param {Object} [options] @param {boolean} [options.force] 跳过缓存强制重新获取
+     * @returns {Promise<string|null>}
      */
     async function getStudentId(options = {}) {
-        // 非强制模式下，优先复用内存缓存，避免重复请求
         if (!options.force && cachedStudentId) {
             Logger.log('Core', `复用缓存 StudentID: ${cachedStudentId}`);
             return cachedStudentId;
         }
-        // 非强制模式下，复用正在进行的获取请求，防止并发重复获取
         if (!options.force && studentIdPromise) {
             return studentIdPromise;
         }
@@ -513,16 +509,13 @@ const GRADE_MAPPING_CONFIG = {
                     if (response.status === 200) {
                         try {
                             const html = response.responseText;
-                            // 使用正则表达式匹配 var dataId = XXXXXXX;
                             const dataIdMatch = html.match(/var\s+dataId\s*=\s*(\d+)\s*;/);
 
                             if (dataIdMatch && dataIdMatch[1]) {
                                 const sid = dataIdMatch[1];
                                 Logger.log('Core', `解析成功，StudentID (dataId): ${sid}`);
-                                // 写入内存缓存，当前页面关闭前持续生效
                                 cachedStudentId = sid;
-                                // 写入 localStorage，兼容选课助手功能
-                                localStorage.setItem('cs-course-select-student-id', sid);
+                                localStorage.setItem('cs-course-select-student-id', sid); // 兼容选课助手
                                 resolve(sid);
                             } else {
                                 Logger.error('Core', "HTML 中未找到 dataId 变量");
@@ -544,12 +537,10 @@ const GRADE_MAPPING_CONFIG = {
             });
         });
 
-        // 强制模式下不参与去重，直接返回
         if (options.force) {
             return fetchPromise;
         }
 
-        // 非强制模式：记录进行中的请求供并发复用，完成后清除
         studentIdPromise = fetchPromise;
         try {
             return await fetchPromise;
@@ -564,7 +555,7 @@ const GRADE_MAPPING_CONFIG = {
     async function fetchAllDataAndCache(retryCount = 0, options = {}) {
         Logger.log("Initial", "开始获取并缓存所有教务数据");
         try {
-            const studentId = await getStudentId(options);
+            const studentId = options.studentId || await getStudentId(options); // options.studentId 为外部已确定正确的 ID
             const [gpaRes, semRes, rankRes] = await Promise.all([
                 new Promise(r => GM_xmlhttpRequest({ method: "GET", url: `https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getMyGpa?studentAssoc=${studentId}`, onload: r, onerror: () => r({ status: 500 }) })),
                 new Promise(r => GM_xmlhttpRequest({ method: "GET", url: `https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getMyGrades?studentAssoc=${studentId}&semesterAssoc=`, onload: r, onerror: () => r({ status: 500 }) })),
@@ -582,8 +573,11 @@ const GRADE_MAPPING_CONFIG = {
             if (isInvalid(gpaRes) || isInvalid(semRes)) {
                 if (retryCount < 1) { // 仅允许重试一次，防止死循环
                     Logger.warn("Core", "检测到请求无效，准备重试...");
-                    localStorage.removeItem('cs-course-select-student-id');
-                    cachedStudentId = null; // 清除内存缓存，确保重试时重新获取
+                    // 显式传入的 studentId（如预取）无效时不清理主缓存
+                    if (!options.studentId) {
+                        localStorage.removeItem('cs-course-select-student-id');
+                        cachedStudentId = null; // 清除内存缓存，确保重试时重新获取
+                    }
                     return await fetchAllDataAndCache(retryCount + 1, options);
                 } else {
                     throw new Error("多次请求均无效，请检查登录状态。");
@@ -1212,6 +1206,10 @@ const GRADE_MAPPING_CONFIG = {
         }
         const cachedData = getCachedData();
         if (isDataReady && cachedData) {
+            if (!cachedData.allGrades || cachedData.allGrades.length === 0) {
+                alert("当前没有可以导出的成绩数据。");
+                return;
+            }
             if (typeof showSemesterCheckboxes === 'function') showSemesterCheckboxes(cachedData.semesterNames);
         } else {
             alert("成绩数据仍在后台加载中，请稍候...");
@@ -1252,7 +1250,7 @@ const GRADE_MAPPING_CONFIG = {
             return;
         }
 
-        // --- 2. 显示遮罩（与全校开课查询中的同步遮罩风格一致） ---
+        // 显示同步遮罩
         const overlay = document.createElement('div');
         overlay.id = 'gm-sync-overlay';
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100000; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
@@ -1358,7 +1356,6 @@ const GRADE_MAPPING_CONFIG = {
                     if (testData && testData.data && testData.data.length > 0) {
                         targetSemesterId = opt.value;
                         targetSemesterName = opt.text;
-                        // 更新遮罩中锁定的抓取学期（与全校开课查询风格一致）
                         updateTargetSem('锁定抓取学期: ' + targetSemesterName);
                         Logger.log('Sync', '找到有数据的学期: ' + opt.text);
                         break;
@@ -1383,7 +1380,7 @@ const GRADE_MAPPING_CONFIG = {
             const timestamp = new Date().toLocaleString('zh-CN', { hour12: false });
 
             // 解析课程数据
-            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
+            // 课程名在 course.course.nameZh（顶层 nameZh 是班级范围名如"全校"）
             const parseCourseData = (courses) => courses.map(course => ({
                 id: String(course.id),
                 code: course.code || 'N/A',
@@ -2513,52 +2510,35 @@ const GRADE_MAPPING_CONFIG = {
         const avgScoreLabel = infoDivs.find(el => el.textContent.includes("平均分") || el.textContent.includes("加权分") || el.dataset.originalHtml);
         if (!avgScoreLabel) return;
 
-        const majorRankTileId = 'gm-major-rank-tile';
-        let rankTile = document.getElementById(majorRankTileId);
-        let avgScoreTile = avgScoreLabel.closest('.score-item');
-
         const semInput = document.querySelector('.myScore .el-select .el-input__inner');
         const currentSem = semInput ? (semInput.value || '全部') : '全部';
         const currentScoreData = weightedScores[currentSem] || {
             weightedScore: data ? 'N/A' : '计算中...',
             tooltipText: data ? '未找到成绩' : '正在拉取成绩与计算中...'
         };
-        const currentRankValue = data ? (data.gpaRankData?.rank ?? '无数据') : '获取中...';
+
+        const weightedScoreTileId = 'gm-weighted-score-tile';
+        let weightedScoreTile = document.getElementById(weightedScoreTileId);
 
         if (scoreContentElement.dataset.gmEnhancedSummary === 'true') {
-            if (avgScoreTile) {
-                const scoreValDiv = avgScoreTile.querySelector('.score');
+            if (weightedScoreTile) {
+                const scoreValDiv = weightedScoreTile.querySelector('.score');
                 if (scoreValDiv && scoreValDiv.textContent !== currentScoreData.weightedScore) {
                     scoreValDiv.textContent = currentScoreData.weightedScore;
                 }
-                const tooltipTrigger = avgScoreTile.querySelector('.gm-tooltip-trigger');
+                const tooltipTrigger = weightedScoreTile.querySelector('.gm-tooltip-trigger');
                 if (tooltipTrigger) tooltipTrigger.setAttribute('data-gm-tooltip', currentScoreData.tooltipText);
-            }
-            if (rankTile) {
-                const rankValDiv = rankTile.querySelector('.score');
-                if (rankValDiv && rankValDiv.textContent !== currentRankValue) {
-                    rankValDiv.textContent = currentRankValue;
-                }
             }
             return;
         }
 
-        // --- 初次构建 DOM ---
-        if (avgScoreTile) {
-            avgScoreTile.id = 'gm-weighted-score-tile';
-            if (!avgScoreLabel.dataset.originalHtml) avgScoreLabel.dataset.originalHtml = avgScoreLabel.innerHTML;
-            avgScoreLabel.innerHTML = `加权百分制分数 <i class="iconfont icon-bangzhu gm-tooltip-trigger" data-gm-tooltip="${currentScoreData.tooltipText}"></i>`;
-            const scoreValDiv = avgScoreTile.querySelector('.score');
-            if (scoreValDiv) scoreValDiv.textContent = currentScoreData.weightedScore;
-        }
-
-        if (!rankTile) {
-            rankTile = document.createElement('li');
-            rankTile.id = majorRankTileId;
-            rankTile.className = 'score-item';
-            rankTile.style.background = '#17a2b8';
-            rankTile.innerHTML = `<div class="icon-img"><i class="iconfont icon-paiming2"></i></div><div class="score-info"><div class="score">${currentRankValue}</div><div class="info">专业排名 <i class="iconfont icon-bangzhu gm-tooltip-trigger" data-gm-tooltip="排名数据来自教务系统\n若无则显示'无数据'"></i></div>`;
-            scoreContentElement.appendChild(rankTile);
+        if (!weightedScoreTile) {
+            weightedScoreTile = document.createElement('li');
+            weightedScoreTile.id = weightedScoreTileId;
+            weightedScoreTile.className = 'score-item';
+            weightedScoreTile.style.background = '#409EFF';
+            weightedScoreTile.innerHTML = `<div class="icon-img"><i class="icon-shuben"></i></div><div class="score-info"><div class="score">${currentScoreData.weightedScore}</div><div class="info">加权百分制分数 <i class="iconfont icon-bangzhu gm-tooltip-trigger" data-gm-tooltip="${currentScoreData.tooltipText}"></i></div>`;
+            scoreContentElement.appendChild(weightedScoreTile);
         }
 
         scoreContentElement.dataset.gmEnhancedSummary = 'true';
@@ -2763,13 +2743,102 @@ const GRADE_MAPPING_CONFIG = {
         originalTableContainer.dataset.gmEnhanced = 'true';
     }
 
+    /** 记录见过的 StudentID（去重），供后台预取 */
+    function recordPortraitStudentId(sid) {
+        if (!sid) return;
+        try {
+            const list = JSON.parse(GM_getValue(CONSTANTS.PORTRAIT_STUDENT_IDS_KEY, '[]'));
+            if (!Array.isArray(list)) return;
+            const str = String(sid);
+            if (list.indexOf(str) === -1) {
+                list.push(str);
+                GM_setValue(CONSTANTS.PORTRAIT_STUDENT_IDS_KEY, JSON.stringify(list));
+            }
+        } catch (e) { }
+    }
+
+    /** 用记录的 StudentID 提前拉取画像数据缓存；无权限的 ID 自动失败忽略 */
+    async function prefetchPortraitData() {
+        try {
+            const list = JSON.parse(GM_getValue(CONSTANTS.PORTRAIT_STUDENT_IDS_KEY, '[]'));
+            if (!Array.isArray(list) || list.length === 0) return;
+            for (const id of list) {
+                if (!id) continue;
+                try {
+                    const data = await fetchAllDataAndCache(0, { force: true, studentId: id });
+                    if (data && data.allGrades && data.allGrades.length > 0) {
+                        GM_setValue(CONSTANTS.PORTRAIT_PREFETCH_KEY, JSON.stringify({ studentId: String(id), data: data, time: Date.now() }));
+                        Logger.log("2.4", `预取学生画像数据成功: studentId=${id}`);
+                        break;
+                    }
+                } catch (e) {
+                    Logger.log("2.4", `预取 studentId=${id} 失败(可能无权限)，忽略`);
+                }
+            }
+        } catch (e) { }
+    }
+
+    /** 获取画像页当前身份 tab 对应的 StudentID（tab-id 数字即 cultivateTypeAssoc） */
+    function getPortraitStudentId() {
+        return new Promise((resolve) => {
+            // tab id 形如 tab-1(主修)/tab-6(研究生)，数字即 cultivateTypeAssoc
+            let cultivateTypeAssoc = '1';
+            try {
+                const activeTab = document.querySelector('.el-tabs__item.is-active');
+                if (activeTab) {
+                    const m = activeTab.id.match(/tab-(\d+)/);
+                    if (m) cultivateTypeAssoc = m[1];
+                }
+            } catch (e) { }
+
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getStdInfo?bizTypeAssoc=2&cultivateTypeAssoc=${cultivateTypeAssoc}`,
+                onload: (res) => {
+                    if (res.status === 200) {
+                        try {
+                            const data = JSON.parse(res.responseText);
+                            const sid = data.student && data.student.id;
+                            if (sid) {
+                                Logger.log('Core', `画像页获取正确 StudentID: ${sid} (cultivateTypeAssoc=${cultivateTypeAssoc})`);
+                                cachedStudentId = sid;
+                                localStorage.setItem('cs-course-select-student-id', sid);
+                                recordPortraitStudentId(sid);
+                                resolve(sid);
+                            } else {
+                                Logger.error('Core', "getStdInfo 响应中未找到 student.id");
+                                resolve(null);
+                            }
+                        } catch (e) {
+                            Logger.error('Core', "getStdInfo JSON 解析失败", e);
+                            resolve(null);
+                        }
+                    } else {
+                        Logger.error('Core', `getStdInfo 请求失败，HTTP状态码: ${res.status}`);
+                        resolve(null);
+                    }
+                },
+                onerror: () => resolve(null)
+            });
+        });
+    }
+
     async function enhancePortraitPage() {
         while (!document.body || !document.querySelector(".score-content")) { await new Promise(resolve => setTimeout(resolve, 50)); }
         Logger.log("2.4", "脚本已在学生画像页激活");
         injectTooltipStylesForPortrait();
 
-        // 声明状态
-        let currentData = getCachedData();
+        // 优先读预取缓存，否则回退 sessionStorage
+        let currentData = null;
+        let prefetchedStudentId = null;
+        try {
+            const pf = JSON.parse(GM_getValue(CONSTANTS.PORTRAIT_PREFETCH_KEY, 'null'));
+            if (pf && pf.data && pf.data.allGrades && pf.data.allGrades.length > 0 && pf.studentId) {
+                currentData = pf.data;
+                prefetchedStudentId = String(pf.studentId);
+            }
+        } catch (e) { }
+        if (!currentData) currentData = getCachedData();
         let currentWeightedScores = currentData ? precomputeAllWeightedScores(currentData.allGrades) : {};
 
         // 渲染方法 (常规调配)
@@ -2805,9 +2874,20 @@ const GRADE_MAPPING_CONFIG = {
         // 1. 立即挂载（无论有无缓存均立即展示界面骨架）
         renderAllComponents();
 
-        // 2. 异步请求数据不阻塞主线程，一旦完成，延后 100ms（避开Vue更新冲突）执行热更新
-        // 学生画像页单独强制重新获取 StudentID，不依赖主页面缓存
-        fetchAllDataAndCache(0, { force: true }).then(freshData => {
+        // 2. 先获取当前身份 tab 对应的正确 StudentID（本研/研究生双身份），再拉取成绩数据
+        const loadPortraitData = () => {
+            return getPortraitStudentId().then(correctId => {
+                // 预取 ID 与当前身份匹配 → 即刻用预取数据更新，随后后台刷新
+                if (correctId && prefetchedStudentId && String(correctId) === prefetchedStudentId && currentData && currentData.allGrades) {
+                    currentWeightedScores = precomputeAllWeightedScores(currentData.allGrades);
+                    setTimeout(triggerHotUpdate, 100);
+                }
+                return fetchAllDataAndCache(0, { force: true, studentId: correctId });
+            });
+        };
+        const initTab = document.querySelector('.el-tabs__item.is-active');
+        window._gm_last_portrait_tab = initTab ? initTab.id : null; // 记录初始 tab，避免首次 observer 误触发
+        loadPortraitData().then(freshData => {
             currentData = freshData;
             currentWeightedScores = precomputeAllWeightedScores(freshData.allGrades);
             setTimeout(triggerHotUpdate, 150);
@@ -2815,11 +2895,26 @@ const GRADE_MAPPING_CONFIG = {
             Logger.error("2.4", "静默获取成绩失败:", err);
         });
 
-        // 3. 监听 Vue 的原生 DOM 修改，并在学期下拉框变更时自动更新卡片
         window._gm_last_portrait_sem = null;
         const observer = new MutationObserver(() => {
             if (!ConfigManager.enablePortraitEnhancement) return;
 
+            // 身份 tab 切换 → 重新拉取对应身份数据
+            const activeTab = document.querySelector('.el-tabs__item.is-active');
+            const tabId = activeTab ? activeTab.id : null;
+            if (tabId && tabId !== window._gm_last_portrait_tab) {
+                window._gm_last_portrait_tab = tabId;
+                Logger.log("2.4", "检测到身份切换: " + ((activeTab.textContent || '').trim()));
+                loadPortraitData().then(freshData => {
+                    currentData = freshData;
+                    currentWeightedScores = precomputeAllWeightedScores(freshData.allGrades);
+                    setTimeout(triggerHotUpdate, 150);
+                }).catch(err => {
+                    Logger.error("2.4", "身份切换后数据拉取失败:", err);
+                });
+            }
+
+            // 学期下拉框变更 → 更新卡片
             const semInput = document.querySelector('.myScore .el-select .el-input__inner');
             if (semInput) {
                 const currentSem = semInput.value || '全部';
@@ -3138,7 +3233,7 @@ const GRADE_MAPPING_CONFIG = {
         // --- 解析 API 返回的课程数据 ---
         parseCourseData(courses, semesterName) {
             const timestamp = new Date().toLocaleString('zh-CN', { hour12: false });
-            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
+            // 课程名在 course.course.nameZh（顶层 nameZh 是班级范围名如"全校"）
             return courses.map(course => ({
                 id: String(course.id),
                 code: course.code || 'N/A',
@@ -3252,10 +3347,7 @@ const GRADE_MAPPING_CONFIG = {
         }
     }
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.6 课程关注 =-=-=-=-=-=-=-=-=-=-=-=-=
-    /**
-     * 将表格行中的教师姓名转换为可点击的教师主页搜索链接【旧版模式】
-     * @description 全校开课查询使用：拆分教师名并直接给每个名字绑定 onclick 跳转
-     */
+    /** 教师名可点击跳转教师主页【旧版：开课查询，直接绑定 onclick】 */
     function enhanceTeacherNames(row) {
         if (!document.getElementById('gm-teacher-link-style')) {
             const style = document.createElement('style');
@@ -3274,9 +3366,8 @@ const GRADE_MAPPING_CONFIG = {
         if (!rawText || rawText === '待定' || rawText === '-') return;
 
         teacherEl.dataset.gmLinked = "true";
-        teacherEl.innerHTML = ''; // 清空原文本
-
-        // 按空格、逗号、分号拆分多个教师（\s 同时兼容换行）
+        teacherEl.innerHTML = '';
+        // 按空白/逗号/分号拆分多教师（\s 兼容换行）
         const names = rawText.split(/[\s,，;；]+/);
         names.forEach((name, idx) => {
             if (!name) return;
@@ -3292,17 +3383,11 @@ const GRADE_MAPPING_CONFIG = {
                 window.open('https://teacher.nwpu.edu.cn/search/syss/.html', '_blank');
             };
             teacherEl.appendChild(a);
-            // 多个教师时补充空格间隔
-            if (idx < names.length - 1) {
-                teacherEl.appendChild(document.createTextNode(' '));
-            }
+            if (idx < names.length - 1) teacherEl.appendChild(document.createTextNode(' '));
         });
     }
 
-    /**
-     * 将表格行中的教师姓名转换为可点击的教师主页搜索链接【新版模式】
-     * @description 选课界面使用：生成独立 span 元素，点击由全局事件委托处理
-     */
+    /** 教师名可点击跳转教师主页【新版：选课界面，span + 全局事件委托】 */
     function enhanceTeacherNamesModern(row) {
         if (!document.getElementById('gm-teacher-link-style')) {
             const style = document.createElement('style');
@@ -3347,7 +3432,7 @@ const GRADE_MAPPING_CONFIG = {
         });
     }
 
-    // 【全局】教师主页搜索点击事件委托（覆盖选课界面等使用新版 span 的位置，仅绑定一次）
+    // 全局事件委托：新版 span 教师名的点击跳转（仅绑定一次）
     if (!window._gm_teacher_link_bound) {
         window._gm_teacher_link_bound = true;
         document.addEventListener('click', function (e) {
@@ -4008,7 +4093,7 @@ const GRADE_MAPPING_CONFIG = {
 
         // 主控逻辑
         async initController() {
-            // 一次性数据迁移：旧版字段映射错误（name 存了班级范围名"全校"、timeAndPlace 存了 scheduleText 对象）
+            // 旧版字段映射错误的数据迁移
             // 检测到异常数据则清除后台同步缓存并重置时间戳，触发本次页面立即重新同步
             this.migrateStaleBackgroundData();
 
@@ -4065,7 +4150,7 @@ const GRADE_MAPPING_CONFIG = {
             const PAGE_SIZE = 1000; // 使用 queryPage__ 参数格式，服务端支持最大1000条/页
 
             // 解析 API 返回的课程数据
-            // 注意：教学班顶层 nameZh 是班级范围名（如"全校"），真正的课程名在 course.course.nameZh
+            // 课程名在 course.course.nameZh（顶层 nameZh 是班级范围名如"全校"）
             const parseCourseData = (courses, semesterName) => {
                 return courses.map(course => ({
                     id: String(course.id),
@@ -4073,7 +4158,7 @@ const GRADE_MAPPING_CONFIG = {
                     name: course.course?.nameZh || course.nameZh || course.nameEn || '',
                     teachers: course.teacherAssignmentStr || '待定',
                     credits: course.course?.credits || course.course?.credit || '',
-                    // scheduleText 是嵌套对象，取 dateTimePlaceText.textZh（时间+地点）作为显示文本
+                    // scheduleText 是对象，取 dateTimePlaceText.textZh（时间+地点）
                     timeAndPlace: course.scheduleText?.dateTimePlaceText?.textZh
                         || course.scheduleText?.dateTimePlacePersonText?.textZh
                         || '详见课表',
@@ -6334,6 +6419,11 @@ const GRADE_MAPPING_CONFIG = {
                 initializeHomePageFeatures();
             }
             return;
+        }
+
+        // 后台预取学生画像数据，加速画像页加载
+        if (location.host === 'jwxt.nwpu.edu.cn' && !href.includes('/student/for-std/student-portrait') && window.top === window.self) {
+            setTimeout(() => prefetchPortraitData(), 6000);
         }
 
         // 1. 评教页面检测
