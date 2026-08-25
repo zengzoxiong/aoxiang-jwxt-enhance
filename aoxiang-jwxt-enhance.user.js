@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.1
+// @version      1.8.2
 // @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
@@ -155,7 +155,8 @@ const GRADE_MAPPING_CONFIG = {
                 links: [
                     { name: "湖畔资料", url: "http://nwpushare.fun", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>' },
                     { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' },
-                    { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' }
+                    { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' },
+                    { name: "瓜拼白车", url: "https://nwpu.codepix.top", desc: "瓜大人自己的在线免费拼车平台", bg: "#e8f1fb", color: "#004EA2", svg: '<svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" fill="#004EA2"/><path d="M143.659 195.051C148.947 192.473 153.174 188.348 155.687 183.31L176.915 141.608L200.441 95.3858C202.932 90.6315 203.735 85.2618 202.733 80.0506C201.8 75.1446 199.287 70.6155 195.528 67.0632C191.683 63.3665 186.71 60.8584 181.284 59.8794C175.858 58.9005 170.243 59.4982 165.2 61.5914L114.885 82.0646L69.5273 100.383C64.2418 102.471 59.7973 106.051 56.8206 110.617C53.8438 115.184 52.4851 120.506 52.9361 125.835C53.3639 130.987 55.5264 135.886 59.1164 139.834C63.0327 144.226 68.4897 147.191 74.5231 148.206L99.8811 153.006L104.225 177.225C105.167 182.884 108.227 188.056 112.865 191.827C117.038 195.302 122.288 197.457 127.857 197.981C133.325 198.535 138.842 197.512 143.659 195.051ZM121.612 174.313L115.98 143.401C115.767 142.223 115.173 141.132 114.279 140.273C113.384 139.414 112.231 138.828 110.971 138.592L78.01 132.352C76.0257 131.914 74.2418 130.9 72.9166 129.457C71.5914 128.014 70.7936 126.217 70.6389 124.326C70.4842 122.436 70.9805 120.549 72.056 118.94C73.1315 117.331 74.7304 116.083 76.621 115.376L121.98 96.976L172.427 76.5043C174.188 75.7668 176.151 75.5533 178.049 75.8928C179.947 76.2324 181.686 77.1086 183.03 78.4016C184.374 79.6946 185.257 81.3413 185.558 83.1169C185.859 84.8924 185.563 86.7101 184.711 88.3215L161.14 134.544L139.913 176.246C139.14 178.046 137.754 179.561 135.968 180.559C134.182 181.557 132.093 181.984 130.019 181.774C127.946 181.564 126.002 180.73 124.484 179.397C122.966 178.065 121.957 176.308 121.612 174.395L121.612 174.313Z" fill="white"/><path d="M124.046 120.104L141.851 103.924C143.533 102.412 145.793 101.584 148.135 101.623C150.476 101.661 152.706 102.563 154.335 104.13C155.964 105.697 156.858 107.801 156.821 109.979C156.783 112.156 155.817 114.229 154.135 115.741L136.33 131.921C134.648 133.434 132.387 134.262 130.046 134.223C127.705 134.184 125.474 133.282 123.845 131.715C122.217 130.148 121.323 128.044 121.36 125.867C121.398 123.689 122.364 121.616 124.046 120.104Z" fill="white"/></svg>' }
                 ]
             },
             {
@@ -1048,14 +1049,10 @@ const GRADE_MAPPING_CONFIG = {
             <button class="gm-menu-item" id="gm-btn-gpa" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> GPA综合分析</button>
             <button class="gm-menu-item" id="gm-btn-export" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></span> 导出成绩与排名</button>
 
-            <div class="gm-menu-group-title">选课助手</div>
+            <div class="gm-menu-group-title">课程助手</div>
             <button class="gm-menu-item" id="gm-btn-follow"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 课程关注列表</button>
             <button class="gm-menu-item" id="gm-btn-sync-course"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-2 4 4 2-2h4"></path></svg></span> 同步最新选课数据</button>
-
-            <div class="gm-menu-group-title">快捷工具</div>
             <button class="gm-menu-item" id="gm-btn-eval-jump"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg></span> 一键自动评教</button>
-            <button class="gm-menu-item" id="gm-btn-person-search"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span> 人员信息检索</button>
-            <button class="gm-menu-item" id="gm-btn-links"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></span> 常用链接访问</button>
 
             <div class="gm-menu-group-title">偏好与系统设置</div>
             <button class="gm-menu-item" id="gm-chk-portrait-btn"><span class="gm-icon" id="icon-portrait"></span> 启用学生画像增强</button>
@@ -1078,16 +1075,10 @@ const GRADE_MAPPING_CONFIG = {
                 FriendlyLinks.show(); // 弹出友情链接弹窗
             };
         }
-
-        document.getElementById('gm-btn-person-search').onclick = () => {
-            hideMenu();
-            PersonnelSearch.openModal();
-        };
-
-        document.getElementById('gm-btn-person-search').onclick = () => {
-            hideMenu();
-            PersonnelSearch.openModal();
-        };
+        const psBtn = document.getElementById('gm-btn-person-search');
+        if (psBtn) {
+            psBtn.onclick = () => { hideMenu(); PersonnelSearch.openModal(); };
+        }
 
         // 绑定教务系统专属事件
         if (!isEcampus) {
@@ -1232,10 +1223,15 @@ const GRADE_MAPPING_CONFIG = {
     /**
      * 处理点击同步数据按钮（直接API调用，无需跳转）
      */
-    async function handleSyncCourseClick() {
+    // 打开同步选课数据功能弹窗（在线同步 / 数据导出 / 本地上传）
+    function handleSyncCourseClick() {
         hideMenu();
+        showSyncDataModal();
+    }
 
-        const confirmMsg = '【更新选课助手数据】\n\n' +
+    // 在线同步：从教务系统抓取最新选课数据
+    async function doSyncCourseData() {
+        const confirmMsg = '【更新选课数据】\n\n' +
             '此操作将直接通过API获取最新选课数据。\n' +
             '数据将用于选课页面的”历史余量”参考。\n' +
             '建议每轮选课开始前执行一次。\n\n' +
@@ -1436,6 +1432,91 @@ const GRADE_MAPPING_CONFIG = {
             overlay.remove();
             alert('同步失败: ' + e.message);
         }
+    }
+
+    // 同步选课数据功能弹窗：在线同步 / 数据导出 / 本地上传
+    function showSyncDataModal() {
+        const existing = document.getElementById('gm-sync-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'gm-sync-modal';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:100010; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); animation:gmFadeIn 0.2s;';
+        overlay.innerHTML = `
+        <div style="background:#fff; border-radius:12px; width:400px; max-width:92%; padding:22px; box-shadow:0 12px 32px rgba(0,0,0,0.25); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <div style="font-size:17px; font-weight:700; color:#303133;">同步最新选课数据</div>
+                <button id="gm-sync-close" style="border:none;background:none;font-size:22px;color:#909399;cursor:pointer;line-height:1;">&times;</button>
+            </div>
+            <div style="font-size:13px; color:#909399; margin-bottom:16px; line-height:1.6;">选课数据用于选课页面的“历史余量”参考，按下以下按钮获取或分享数据：</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button id="gm-sync-online" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
+                    <span style="font-size:20px;">🔄</span>
+                    <span><b>在线同步</b><br><span style="font-size:12px;color:#909399;">从教务系统抓取最新课程数据</span></span>
+                </button>
+                <button id="gm-sync-export" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
+                    <span style="font-size:20px;">⬇️</span>
+                    <span><b>数据导出</b><br><span style="font-size:12px;color:#909399;">导出当前数据，分享给其他同学</span></span>
+                </button>
+                <button id="gm-sync-import" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
+                    <span style="font-size:20px;">⬆️</span>
+                    <span><b>本地上传</b><br><span style="font-size:12px;color:#909399;">导入他人分享的选课数据</span></span>
+                </button>
+            </div>
+            <input type="file" id="gm-sync-file" accept=".json,application/json" style="display:none;">
+        </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const close = () => overlay.remove();
+        document.getElementById('gm-sync-close').onclick = close;
+        overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        document.getElementById('gm-sync-online').onclick = () => { close(); doSyncCourseData(); };
+        document.getElementById('gm-sync-export').onclick = exportSyncData;
+        document.getElementById('gm-sync-import').onclick = () => document.getElementById('gm-sync-file').click();
+        document.getElementById('gm-sync-file').onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) importSyncData(file);
+            e.target.value = '';
+        };
+    }
+
+    // 导出选课数据为 JSON（供分享/备份）
+    function exportSyncData() {
+        let history = {};
+        try { history = JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); } catch (e) { history = {}; }
+        const data = { exportTime: new Date().toLocaleString('zh-CN', { hour12: false }), version: '1.8.2', data: history };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // 文件名带时间戳，如 翱翔教务选课数据20260825T0728
+        const now = new Date();
+        const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        a.download = `翱翔教务选课数据${ts}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert('数据已导出，可分享给其他同学使用。');
+    }
+
+    // 导入他人分享的选课数据 JSON
+    function importSyncData(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const parsed = JSON.parse(reader.result);
+                const history = (parsed && parsed.data && typeof parsed.data === 'object') ? parsed.data : parsed;
+                if (!history || typeof history !== 'object') throw new Error('格式不正确');
+                GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(history));
+                alert('导入成功！已更新选课数据。');
+            } catch (e) {
+                alert('文件格式不正确，请使用本脚本导出的 JSON 文件。');
+            }
+        };
+        reader.onerror = () => alert('文件读取失败');
+        reader.readAsText(file);
     }
 
     /**

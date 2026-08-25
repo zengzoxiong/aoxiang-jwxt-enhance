@@ -37,6 +37,7 @@ logs/
 
 # Claude 文件
 .claude/
+CLAUDE.md
 
 # Playwright MCP 测试残留
 .playwright-mcp/
