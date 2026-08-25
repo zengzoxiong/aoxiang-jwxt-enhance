@@ -1485,14 +1485,23 @@ const GRADE_MAPPING_CONFIG = {
     function exportSyncData() {
         let history = {};
         try { history = JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); } catch (e) { history = {}; }
-        const data = { exportTime: new Date().toLocaleString('zh-CN', { hour12: false }), version: '1.8.2', data: history };
+        // 时间戳取缓存数据的最新同步时间（记录里的 time），而非导出时间
+        let dataTime = null;
+        Object.values(history).forEach(records => {
+            (records || []).forEach(r => { if (r && r.time && (!dataTime || r.time > dataTime)) dataTime = r.time; });
+        });
+        const exportTime = dataTime || new Date().toLocaleString('zh-CN', { hour12: false });
+        // 将缓存时间(2026/8/21 13:41:03)转为文件名时间戳(20260821T1341)
+        let ts = '';
+        const m = String(dataTime || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
+        if (m) {
+            ts = `${m[1]}${String(m[2]).padStart(2, '0')}${String(m[3]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}${String(m[5]).padStart(2, '0')}`;
+        }
+        const data = { exportTime, version: '1.8.2', data: history };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        // 文件名带时间戳，如 翱翔教务选课数据20260825T0728
-        const now = new Date();
-        const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
         a.download = `翱翔教务选课数据${ts}.json`;
         document.body.appendChild(a);
         a.click();
