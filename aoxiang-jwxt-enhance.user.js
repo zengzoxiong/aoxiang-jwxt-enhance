@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.2
-// @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
+// @version      1.8.3
+// @description  本脚本适用于西北工业大学翱翔门户与翱翔教务页面。
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
 // @match        https://jwxt.nwpu.edu.cn/student/for-std/course-select/some-page*
@@ -26,23 +26,33 @@
 // @downloadURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.user.js
 // @updateURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.meta.js
 // ==/UserScript==
-
-// ==================== 用户可配置区域 ====================
-/**
- * @description 中文等级制成绩到百分制分数的映射。
- * @description 您可以根据需要修改这里的数值，例如将 '优秀' 改为 95。
- */
-const GRADE_MAPPING_CONFIG = {
-    '优秀': 93,
-    '良好': 80,
-    '中等': 70,
-    '及格': 60,
-    '不及格': 0
-};
-
-// ============================================================
 (function () {
     'use strict';
+
+    // ============================================================
+    // 【脚本启动流程总览】（环境守卫 → 路由分发 → 页面初始化）
+    //   document-start 加载期（IIFE 顶层顺序执行）：
+    //     0.0 拦截异常图片请求（优化加载速度）
+    //     0.x 定义常量 / 工具 / 存储（ConfigManager、GmDialog 等）
+    //     2.x 各功能模块定义（悬浮球、同步、存档、开课查询、选课助手等）
+    //     TextbookInfoModule.installHook()：必须抢在页面自身 XHR 之前挂载拦截器，
+    //       故保持在加载期无条件执行（内部有防重复挂载守卫）
+    //   DOMContentLoaded（见文件末尾）：
+    //     runMainFeatures() 统一路由分发，所有页面入口仅此一处：
+    //       ① window.name === Worker 名      → 后台同步 Worker，直接返回
+    //       ② gm-id-fetcher-patch iframe     → 直接返回（守卫）
+    //       ③ ecampus.nwpu.edu.cn            → 门户同步 + 门户主页功能，返回
+    //       ④ jwxt 顶层窗口（非画像页）       → 延迟 6s 预取画像数据（加速画像页）
+    //       ⑤ 评教页    → initEvaluationHelper（load/hashchange/兜底三重触发，内部有幂等守卫）
+    //       ⑥ 开课查询  → LessonSearchEnhancer.init()（2.5 同步面板）+ initLessonSearchPage()（2.6 课程关注）
+    //       ⑦ 学生画像  → enhancePortraitPage()
+    //       ⑧ 培养方案  → initProgramPageEnhancement()
+    //       ⑨ 我的课表  → TextbookInfoModule.initUI()（UI 阶段；数据阶段由 installHook 缓存兜底）
+    //       ⑩ 教师搜索  → 跨标签页自动搜索注入（teacher.nwpu.edu.cn）
+    //       ⑪ 顶层主页  → initializeHomePageFeatures() + 延迟启动后台同步控制器
+    //   例外：/course-selection 选课助手（2.7）为历史遗留的独立 IIFE，
+    //     自带 main() 与 readyState 等待，待后续版本迁移至统一路由。
+    // ============================================================
 
     // =============== 0.0 拦截浏览器的异常请求，优化网页加载速度 ===============
     try {
@@ -59,7 +69,6 @@ const GRADE_MAPPING_CONFIG = {
                 },
                 set: function (value) {
                     if (value && typeof value === 'string' && value.indexOf(BAD_KEY) !== -1) {
-                        //console.log('[NWPU-Enhanced] 成功拦截底层图片请求:', value);
                         return;
                     }
                     originalSrcDescriptor.set.call(this, value);
@@ -73,7 +82,6 @@ const GRADE_MAPPING_CONFIG = {
         const originalSetAttribute = Element.prototype.setAttribute;
         Element.prototype.setAttribute = function (name, value) {
             if (this instanceof HTMLImageElement && name === 'src' && value && value.indexOf(BAD_KEY) !== -1) {
-                //console.log('[NWPU-Enhanced] 成功拦截 setAttribute:', value);
                 return;
             }
             return originalSetAttribute.apply(this, arguments);
@@ -93,7 +101,14 @@ const GRADE_MAPPING_CONFIG = {
         LAST_SYNC_TIME_KEY: 'jwxt_last_bg_sync_time',
         HISTORY_STORAGE_KEY: 'course_enrollment_history_auto_sync',
         SYNC_COOLDOWN_MS: 1 * 60 * 60 * 1000, // 1小时冷却
-        GRADES_SNAPSHOT_KEY: 'jwxt_grades_snapshot_v1',//成绩快照存储Key
+        // 中文等级制成绩到百分制分数的映射（用于等级制成绩折算百分制 GPA）
+        GRADE_MAPPING_CONFIG: {
+            '优秀': 93,
+            '良好': 80,
+            '中等': 70,
+            '及格': 60,
+            '不及格': 0
+        },
         // 学生画像专用：记录见过的 StudentID（可能多个），用于后台预取加速画像页加载
         PORTRAIT_STUDENT_IDS_KEY: 'jwxt_portrait_student_ids',
         // 学生画像专用：跨标签页预取缓存 { studentId, data, time }
@@ -103,15 +118,15 @@ const GRADE_MAPPING_CONFIG = {
     /**
      * 统一日志输出工具
      * @description 所有控制台输出统一带有 [NWPU-Enhanced] 前缀
+     * 注意：不使用 %c 彩色格式（Tampermonkey 日志视图无法解析该占位符，会导致样式字符串被原样拼接输出）
      */
     const Logger = {
         _print: (module, msg, type = 'log', args = []) => {
-            const prefix = `%c[NWPU-Enhanced][${module}]`;
-            const css = 'color: #007bff; font-weight: bold;';
+            const prefix = `[NWPU-Enhanced][${module}]`;
             if (args.length > 0) {
-                console[type](prefix, css, msg, ...args);
+                console[type](prefix, msg, ...args);
             } else {
-                console[type](prefix, css, msg);
+                console[type](prefix, msg);
             }
         },
         log: (module, msg, ...args) => Logger._print(module, msg, 'log', args),
@@ -120,6 +135,9 @@ const GRADE_MAPPING_CONFIG = {
         info: (module, msg, ...args) => Logger._print(module, msg, 'info', args)
     };
 
+    // HTML 转义工具（弹窗文案 / 存档区存档名 / 重命名输入等共用）
+    const esc = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     // 悬浮球 UI 变量
     let floatBall = null;
     let floatMenu = null;
@@ -127,7 +145,6 @@ const GRADE_MAPPING_CONFIG = {
     let menuGpaBtn = null;
     let menuSyncBtn = null;
     let menuFollowBtn = null;
-    let menuHupanBtn = null;
 
     // 功能UI变量
     let semesterCheckboxContainer = null;
@@ -146,6 +163,80 @@ const GRADE_MAPPING_CONFIG = {
         set enableCourseWatch(val) { GM_setValue('enableCourseWatch', val); }
     };
 
+    // --- 统一弹窗工具 GmDialog ---
+    const GmDialog = (() => {
+        const ICONS = {
+            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+            warn: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#E6A23C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+            error: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+            info: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+        };
+        const THEME = { success: '#67C23A', warn: '#E6A23C', error: '#F56C6C', info: '#409EFF' };
+
+        const ensureStyle = () => {
+            if (document.getElementById('gm-dialog-style')) return;
+            const style = document.createElement('style');
+            style.id = 'gm-dialog-style';
+            style.textContent = `
+            .gm-dialog-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); z-index: 200000; display: flex; align-items: center; justify-content: center; animation: gmDialogFadeIn 0.2s ease-out; transition: opacity 0.18s; }
+            @keyframes gmDialogFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .gm-dialog { background: #fff; border-radius: 12px; width: 420px; max-width: 90%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
+            .gm-dialog-body { display: flex; gap: 14px; padding: 22px 24px 18px; align-items: flex-start; }
+            .gm-dialog-icon { flex-shrink: 0; margin-top: 2px; }
+            .gm-dialog-text { font-size: 14px; color: #303133; line-height: 1.7; word-break: break-word; }
+            .gm-dialog-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+            .gm-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 4px 24px 20px; }
+            .gm-dialog-btn { padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; border: 1px solid #dcdfe6; background: #fff; color: #606266; transition: all 0.2s; }
+            .gm-dialog-btn:hover { border-color: #c0c4cc; color: #303133; }
+            .gm-dialog-btn-primary { color: #fff; border: none; }
+            .gm-dialog-btn-primary:hover { opacity: 0.85; color: #fff; }
+        `;
+            document.head.appendChild(style);
+        };
+
+        const escapeHtml = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        function open(opts, isConfirm) {
+            opts = typeof opts === 'string' ? { message: opts } : (opts || {});
+            const type = ICONS[opts.type] ? opts.type : 'info';
+            ensureStyle();
+
+            return new Promise(resolve => {
+                const overlay = document.createElement('div');
+                overlay.className = 'gm-dialog-overlay';
+                const msgHtml = escapeHtml(opts.message || '').replace(/\n/g, '<br>');
+                const titleHtml = opts.title ? `<div class="gm-dialog-title">${escapeHtml(opts.title)}</div>` : '';
+                overlay.innerHTML = `
+                <div class="gm-dialog">
+                    <div class="gm-dialog-body">
+                        <span class="gm-dialog-icon">${ICONS[type]}</span>
+                        <div class="gm-dialog-text">${titleHtml}${msgHtml}</div>
+                    </div>
+                    <div class="gm-dialog-footer">
+                        ${isConfirm ? `<button class="gm-dialog-btn gm-dialog-cancel">${escapeHtml(opts.cancelText || '取消')}</button>` : ''}
+                        <button class="gm-dialog-btn gm-dialog-btn-primary" style="background:${THEME[type]};">${escapeHtml(opts.confirmText || '确定')}</button>
+                    </div>
+                </div>`;
+                document.body.appendChild(overlay);
+
+                const close = result => {
+                    overlay.style.opacity = '0';
+                    setTimeout(() => overlay.remove(), 180);
+                    resolve(result);
+                };
+                overlay.querySelector('.gm-dialog-btn-primary').onclick = () => close(true);
+                const cancelBtn = overlay.querySelector('.gm-dialog-cancel');
+                if (cancelBtn) cancelBtn.onclick = () => close(false);
+                overlay.onclick = e => { if (e.target === overlay) close(!isConfirm); };
+            });
+        }
+
+        return {
+            alert: opts => open(opts, false),
+            confirm: opts => open(opts, true)
+        };
+    })();
+
     // --- 常用链接导航 ---
     const FriendlyLinks = {
         categories: [
@@ -153,8 +244,8 @@ const GRADE_MAPPING_CONFIG = {
                 title: "友情链接快捷访问",
                 titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
                 links: [
-                    { name: "湖畔资料", url: "http://nwpushare.fun", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>' },
-                    { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>' },
+                    { name: "湖畔资料", url: "https://nwpushare.cn", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5.2 8 4.5 5.5 4.5H5c-.8 0-1.5.7-1.5 1.5v6.5c0 .8.7 1.5 1.5 1.5h.5c2.5 0 4.8.7 6.5 2 1.7-1.3 4-2 6.5-2h.5c.8 0 1.5-.7 1.5-1.5V6c0-.8-.7-1.5-1.5-1.5h-.5C16 4.5 13.7 5.2 12 6.5z"></path><line x1="12" y1="6.5" x2="12" y2="16"></line><path d="M3.5 19.5c1.4 1 2.9 1 4.3 0s2.9-1 4.3 0 2.9 1 4.3 0 2.9-1 4.3 0"></path></svg>' },
+                    { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<img src="data:image/png;base64,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" alt="">' },
                     { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' },
                     { name: "瓜拼白车", url: "https://nwpu.codepix.top", desc: "瓜大人自己的在线免费拼车平台", bg: "#e8f1fb", color: "#004EA2", svg: '<svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" fill="#004EA2"/><path d="M143.659 195.051C148.947 192.473 153.174 188.348 155.687 183.31L176.915 141.608L200.441 95.3858C202.932 90.6315 203.735 85.2618 202.733 80.0506C201.8 75.1446 199.287 70.6155 195.528 67.0632C191.683 63.3665 186.71 60.8584 181.284 59.8794C175.858 58.9005 170.243 59.4982 165.2 61.5914L114.885 82.0646L69.5273 100.383C64.2418 102.471 59.7973 106.051 56.8206 110.617C53.8438 115.184 52.4851 120.506 52.9361 125.835C53.3639 130.987 55.5264 135.886 59.1164 139.834C63.0327 144.226 68.4897 147.191 74.5231 148.206L99.8811 153.006L104.225 177.225C105.167 182.884 108.227 188.056 112.865 191.827C117.038 195.302 122.288 197.457 127.857 197.981C133.325 198.535 138.842 197.512 143.659 195.051ZM121.612 174.313L115.98 143.401C115.767 142.223 115.173 141.132 114.279 140.273C113.384 139.414 112.231 138.828 110.971 138.592L78.01 132.352C76.0257 131.914 74.2418 130.9 72.9166 129.457C71.5914 128.014 70.7936 126.217 70.6389 124.326C70.4842 122.436 70.9805 120.549 72.056 118.94C73.1315 117.331 74.7304 116.083 76.621 115.376L121.98 96.976L172.427 76.5043C174.188 75.7668 176.151 75.5533 178.049 75.8928C179.947 76.2324 181.686 77.1086 183.03 78.4016C184.374 79.6946 185.257 81.3413 185.558 83.1169C185.859 84.8924 185.563 86.7101 184.711 88.3215L161.14 134.544L139.913 176.246C139.14 178.046 137.754 179.561 135.968 180.559C134.182 181.557 132.093 181.984 130.019 181.774C127.946 181.564 126.002 180.73 124.484 179.397C122.966 178.065 121.957 176.308 121.612 174.395L121.612 174.313Z" fill="white"/><path d="M124.046 120.104L141.851 103.924C143.533 102.412 145.793 101.584 148.135 101.623C150.476 101.661 152.706 102.563 154.335 104.13C155.964 105.697 156.858 107.801 156.821 109.979C156.783 112.156 155.817 114.229 154.135 115.741L136.33 131.921C134.648 133.434 132.387 134.262 130.046 134.223C127.705 134.184 125.474 133.282 123.845 131.715C122.217 130.148 121.323 128.044 121.36 125.867C121.398 123.689 122.364 121.616 124.046 120.104Z" fill="white"/></svg>' }
                 ]
@@ -163,18 +254,18 @@ const GRADE_MAPPING_CONFIG = {
                 title: "校内网站快捷访问",
                 titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
                 links: [
-                    { name: "西北工业大学 WebVPN", url: "https://webvpn.nwpu.edu.cn/", desc: "校外免客户端访问校园网环境", bg: "#f0f9eb", color: "#67C23A", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>' },
-                    { name: "NOJ", url: "https://noj.nwpu.edu.cn/cpbox/", desc: "程序设计基础理论/实验 NOJ平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>' }
+                    { name: "西北工业大学 WebVPN", url: "https://webvpn.nwpu.edu.cn/", desc: "校外免客户端访问校园网环境", bg: "#f0f9eb", color: "#67C23A", svg: '<img src="data:image/png;base64,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" alt="">' },
+                    { name: "NOJ", url: "https://noj.nwpu.edu.cn/cpbox/", desc: "程序设计基础理论/实验 NOJ平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>' }
                 ]
             },
             {
                 title: "网课网站快速访问",
                 titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
                 links: [
-                    { name: "学堂在线", url: "https://bknwpu.yuketang.cn/", desc: "西工大专属雨课堂在线学习主页", bg: "#fef0f0", color: "#F56C6C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>' },
-                    { name: "中国大学 MOOC 学校云", url: "https://www.icourse163.org/spoc/schoolcloud/index.htm", desc: "国家精品课程与SPOC在线学习平台", bg: "#f0f9eb", color: "#67C23A", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>' },
-                    { name: "超星学习通", url: "http://nwpu.mooc.chaoxing.com", desc: "西工大超星泛雅网络教学平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>' },
-                    { name: "智慧树 / 知到", url: "https://www.zhihuishu.com/", desc: "国内大型学分课跨校共享平台", bg: "#fdf6ec", color: "#E6A23C", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"></path><path d="M9 7V2h6v5"></path><path d="M5 12h14v-5H5v5z"></path></svg>' }
+                    { name: "学堂在线", url: "https://bknwpu.yuketang.cn/", desc: "西工大专属雨课堂在线学习主页", bg: "#fef0f0", color: "#F56C6C", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAEqklEQVR42u2by28bRRjAfzuz602a96tOghM1L6IGYh5qiVohpWoV1JYD4oAEBw4IESQuOSAhwQnEPwAXxInSYyVKK5CQKBQONIc+adM0VRuURnm7TZpH3Ti2d3c4JI4a4riKg5M4u59kybPSePz9vm++me/bGU0ppQCiFpzvi3NxwGJi1sF22FEiBVQWCdrqdY60GJj64nNNKaXuzzl8/VuU0NwO03oN8RcKujpMdhcKRNTCVcoDhJYMHrVAnO+Lu0r5JyGc74sjLg5YuFUuDliIiVnHtQAmZh30taJ9VbHgnTYfuwsEPSMWpy7FtvXKULJLo8kvafILGv2SQIlgJqI48VeUvjE7aR/bAX2tH/zwkEmgRABweK9Bf8jh8r3tM112+TT2VkuCAUlzlaQ8X0sK5YN2k49PzeOsYbw1ASSUT0hFwcoBfDq8e9AkGJCE5hTfX4gyNpNZF3mmRBAMSII1kobdEqE9vU9BjkZRrsb0Y7U+AE+T460+DjQsdq+v0Og8ZPL52cj/rnRlkWBfnaStTqeqWKS3CUoBKm0AgVKR0mM2IkW5GgcbdfbX6dSWiYx6lb5d5rSmQUu1pL1Z58UaHSE2Z9yMAmiplhxtNbAd+KUnTn9odTQ2JHQ8Z9DebFCWr206+IwBqCjQ6OrIQS5ZsrlS8unpeWbnVwaj9141eaV+6xwxY47W5JfLyidWjbry1cPt27O1s1Bkck6vepbsDwh2JoBsEQ9Auh0dpf7TdhmAK4Mrl7Srg9mZVqcdgi8NWNgOS7mAw++34u4CkLB6tlreC4IeAA/AxgGYOjxbKSnN07IWgL6RQsUnx3IozNVwFJzsjtLdb7nHA462GhTmLlpeaPDWfp+7pkC+qaVsuz4IxpPMBstxEYDeUZuHT1RiQ3MOd8bt7AmCI9POikLn/bn1ZTvzMcWXP0U40KCjgO5+i5idRavAt39GebvNR0WBRu+Izd9D64/wjxYU57Z5jqCnem/21bkFbyPkAdjhktGS7P46nWOtBo6Cn6/HuDFsZ5cHlORpBEoEucb6NznVxYLOdpPaMsGecsFHh3O25MVH2h7w5ss+Xn/BACBmwxdnI+s6SlNXIVaUxqWA2lLBVNjODg947Xlj+btPQrBGuisIGjJ121sFPAAeAA+AB8AD4AHIClmw0gAwOOmsSo+zUQYnHcILav1b4W/+WOCNl3yUF2j0jdpcH7KzSvHpecXNYZsz12Lp5QIPHytOXIiSquSVqr3ZMhVW3JmwFz/jNpNhldl0+NfeOMEaSb6poYAfr8Y2VWHLgbsTNjdHbHqG7bTvPKQNYHTa4bMfIjT6BeMzigePMh8jInHFjSGbq4MWfeMO0bja2oLIfEzRk+EiR0Lpy/csbo3ZWHaWVITGk5wcDyUprc9F1PIrtoQo4PaYzYW7FteHMltOzxiAgQcOp6/EOB40UMCZa/Gkx+lPdkfpbDcxDY2psKK7P073PxZT4c0Jqtr734W3/HyXT4c8c+0z/ez00+IxC2LW1thBSBdnA1KAqCxyL4HKIoFoq9ddC6CtXkccaTHwF7rPC/yFgiMtBsLUoavDdBWExOVpU1+6PQ7uvT7/LwgCuorx9strAAAAAElFTkSuQmCC" alt="">' },
+                    { name: "中国大学 MOOC 学校云", url: "https://www.icourse163.org/spoc/schoolcloud/index.htm", desc: "国家精品课程与SPOC在线学习平台", bg: "#f0f9eb", color: "#67C23A", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADsklEQVR42u2bz4sTZxjHP5NsdrO/ctB2ha7rquAqIq0KRYoWx0OtF0Hn5smTeB3/DC9FQRSZQwstCC0ulhbR7aXSWh0P7mDLuv4imqw/kk2su9ndzI9MpoeZWLXGLWqS2cz7hZdMCMzM85nnfd53nueJ5HkeUVaMiEsAEAAEgGhLOjS6zQYeAlPByAIZYBK4A2Q0RffaGcBixpnAbeAvwACuA+Oaoj+NCoB6SgN/AL8DvwETS9FT3gXAqyoCvwAXgDFN0R9HDcCrug78AJzTFH0yigBe1J/At8B3YfOMZgGoqQpcBE4C5zVFr0YNwIu6D5wATmuKPteKG9h87FeplQBqegYcB45piv7sPRsYA4aAEWADsCr4vhIYBAbDAKCmGeAo8JWm6NZbGLsM2ApsCcYmYB2QDOsUqKd7wBFN0X96k+sCG4HPgR3AdmD1UosBi+lH4LCm6LnA6I+A3cAe4Atg2VIPgovvrEqrZzPFXZcqsQ2DgXu/d3WEzeg58wPST7ZQnEnh2Faqszu2tyfVuOuFAoBHjEx+K9npYcoLtfhnNeXaLQXguN3cym4n/zSF69pNM7rlACynn5vZHRT+7sKrVgC7ZQ+hqQBct4uJrEyukMTzXKDS8unXNADp3KekH67EdR3ADU3QbTiAeXM543d3Ui7bgBO6pbahAKYKnzD5YA1e1YYoZoWnCmuCIIdIiwsAAoAAIAAIAAKAACAACAACQPhehj7GLxQM46eW1+Pn00eARLsDkOr9cGh0WzwAsRm/0FD7/PD/nvzq5D5KpXd7GersXkFPaqT5AN4AZhi/EFErSGyqN5XaEsBrgKSAzwAZ+DLwkugAeA2QgQDEbv3W/gOzs048UgB4uYb3jevMHXSsIo5VxK3Mhw5Aw3OC8UQf8UQfyb5hqq6FbeZxrAKu05KWgNamxWPxLpK9QyR7h6i6JrY5jW3mqFbK0QDwMozkcxgVp4RdzuGY03heQ3KINn6v4x38BtAHwciGojbYkeinI9GP178WxypgLzym4sy+7enywDh+U6cRHN81VNkNfXVYkmJ0JgfoTA7gVuaxFh4hSdJiTVc3+Ldh87KhypklXR5/Hjw7eulJreM/hWT/iV4ALgFXDFUutVV/QB2XvgiMAWOGKufbukEikAGMAj8DhqHKXls3SAS6BnwPjBqqnG77ZTDQBHAGOGOo8r2o7ANmAqO/NlT5WpR2gpeBU8BZQ5XNqPQHzAGngZOGKt8IZUZI/HMUkRUWAAQAASC6+gcsCmJ9lr5ltQAAAABJRU5ErkJggg==" alt="">' },
+                    { name: "超星学习通", url: "http://nwpu.mooc.chaoxing.com", desc: "西工大超星泛雅网络教学平台", bg: "#ecf5ff", color: "#409EFF", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACAklEQVR42pWSz0vTcRzGX89ncy4RkRgSoQZiC+zULepg0KlL0MWmm+JXRcw6hUTs5GFEhMfox3JT4tv6FyI6dKmgU0SESIQHEYkuGc45v/u+O6gLUwOf6+d53jw/PmIH5nntuKqPlNOs/4YDYCNDl1BtBmscULG4CBCtv6rag9GLWa+Npt8RaRhTfn4BwMbS5zHlsNplDIgFSWARwNUPOJUBaOAs6BtBeMK8zAUbSb8i5ANQQZFzANSsuiuL/mtTT198BYYBbHTwE2atRHRRz/z32zHSe/hR/gtbBt7uig9C1K6Pd9G0tQZbHAU2cKOVcLMpCtVHbPCRZl4f6UJYzgLdDhFHxDkyXAxT7O8KcnEAGx9PHGr75tDxnRXi+0uUW0XBb4Lyko1mHhJpmiFYd9vNjzSjzSyV2i3gF41uifKOj7o+P/+FjmQCcRtIUVv/jimJFIPqVVAKNEXn6TY9fv65HgSzFswy1u+lgEAFP09HdxI0BZYAi6vol1Twu1Tw8/T0BJYazmDhALJOmeclqNhdQiaAZZxyXLtSUl9fuCf/9HSUhaUMZlmkdrBZ4rqnOqF/rI2wdgdsArGClOPMqRIrK7C2OQTKYnYSpzyR2H35+VUA7Wt6cKKNrY0pTJPI1jABtICe4CIP9HL2x56vf+hknpdggyKEFY65Sc3N/TyI9wdocMOj18wYfwAAAABJRU5ErkJggg==" alt="">' },
+                    { name: "智慧树 / 知到", url: "https://www.zhihuishu.com/", desc: "国内大型学分课跨校共享平台", bg: "#fdf6ec", color: "#E6A23C", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABw0lEQVR42qWTTWsTURSGn5nMZJKmLdVoSCsGwRpKBX+Bv8TfIK5daJciuHIruHDhMgvdCNKtrgrSSneKJEJjsc1HMzPJZO7c103SKqTx61kduOd9Fpf3ACBpXVJDUl+/pz/ZXWcSrkvq6u/pSqozsf0rDUdSH1hmBs93X1B02ty5dZ9zCN2Z4f47lHaJkjbtsEOUWD60ZgoW3elkBcMUJMGneySHr1grVbhUrLHzJeLha7A2AxsD9tRwKujHhsdvoPXtCBvcQI5DIRdQ9BfIgM3KmKj3GZp3Udz+VdDs7TM0Xbb3oXU8xOTKOE4Oo4zMGlzHYSkYk0ZNSBqY3oBo9+OZ4OXeI76HfWqXwaQJJCc4WYzv+niuz8hAJwJjLXATG3b4+mDrTJB3F1nIB1xbgWr1Kt6V22T5NeI0Ik5DyiVRK+fJF1bAv45TXMYtBUyLpOPwUCbLdHRiNDaS7FBpGunZzhM9fb+lUTpWOJQyk8gkbdnMKDw4kCR5ABdLFQDKS9OvKeB5sH5hkzSLCTyfwAPIQ64KQGl1FYC5RUrMCEkU/OLcIm2f9xp4hXlhgLdI2viPY9r4+SIbkgZ/EBxMdusAPwBB3+9eEof0vgAAAABJRU5ErkJggg==" alt="">' }
                 ]
             }
         ],
@@ -186,9 +277,9 @@ const GRADE_MAPPING_CONFIG = {
             style.textContent = `
             .gm-fl-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); z-index: 100005; display: flex; justify-content: center; align-items: center; animation: gmLinkFadeIn 0.2s ease-out; }
             @keyframes gmLinkFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-            .gm-fl-modal { background: #f5f7fa; border-radius: 12px; width: 720px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+            .gm-fl-modal { background: #f5f7fa; border-radius: 12px; width: 720px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
             .gm-fl-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; color: #303133; }
-            .gm-fl-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+            .gm-fl-title { font-size: 19px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
             .gm-fl-close { cursor: pointer; color: #909399; font-size: 26px; line-height: 1; user-select: none; transition: color 0.2s; }
             .gm-fl-close:hover { color: #f56c6c; }
             .gm-fl-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
@@ -199,6 +290,7 @@ const GRADE_MAPPING_CONFIG = {
             .gm-fl-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); border-color: #c6e2ff; }
             .gm-fl-icon-box { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
             .gm-fl-icon-box svg { width: 20px; height: 20px; }
+            .gm-fl-icon-box img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
             .gm-fl-info { flex: 1; min-width: 0; }
             .gm-fl-name { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
             .gm-fl-arrow { font-size: 12px; color: #c0c4cc; transition: transform 0.2s, color 0.2s; font-weight: bold; }
@@ -220,7 +312,7 @@ const GRADE_MAPPING_CONFIG = {
                         <a href="${link.url}" target="_blank" class="gm-fl-card">
                             <div class="gm-fl-icon-box" style="background:${link.bg}; color:${link.color};">${link.svg}</div>
                             <div class="gm-fl-info">
-                                <div class="gm-fl-name">${link.name} <span class="gm-fl-arrow">➔</span></div>
+                                <div class="gm-fl-name">${link.name} <span class="gm-fl-arrow"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span></div>
                                 <div class="gm-fl-desc" title="${link.desc}">${link.desc}</div>
                             </div>
                         </a>
@@ -233,7 +325,7 @@ const GRADE_MAPPING_CONFIG = {
             <div class="gm-fl-modal" onclick="event.stopPropagation()">
                 <div class="gm-fl-header">
                     <div class="gm-fl-title">
-                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
                         常用链接访问
                     </div>
                     <span class="gm-fl-close" onclick="document.getElementById('gm-friendly-links-modal').style.display='none'">&times;</span>
@@ -247,7 +339,7 @@ const GRADE_MAPPING_CONFIG = {
         show: function () { this.initModal(); document.getElementById('gm-friendly-links-modal').style.display = 'flex'; }
     };
 
-    // 更新源配置：Gitee 主源 + GitHub 兜底（分支不同：Gitee=master、GitHub=main）
+    // 更新源配置：Gitee 主源 + GitHub 副源
     const UPDATE_SOURCES = {
         GITEE_REPO: 'leamloli/aoxiang-jwxt-enhance',
         GITEE_BRANCH: 'master',
@@ -272,7 +364,7 @@ const GRADE_MAPPING_CONFIG = {
             let currentTry = 0;
             const requestNext = () => {
                 if (currentTry >= urlsToTry.length) {
-                    if (!auto && btnText) btnText.innerHTML = `网络受限，点击重试`;
+                    if (!auto && btnText) btnText.innerHTML = `网络故障，点击重试`;
                     return;
                 }
                 GM_xmlhttpRequest({
@@ -323,7 +415,7 @@ const GRADE_MAPPING_CONFIG = {
             overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); animation: gmFadeIn 0.2s;';
 
             const modal = document.createElement('div');
-            modal.style.cssText = 'background:#fff; width:440px; padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2); font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align:center; position:relative;';
+            modal.style.cssText = 'background:#fff; width:440px; padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2); font-family:"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; text-align:center; position:relative;';
 
             modal.innerHTML = `
             <h3 style="margin:0 0 15px 0; color:#303133; font-size:18px; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -331,7 +423,7 @@ const GRADE_MAPPING_CONFIG = {
                 脚本更新指引
             </h3>
             <p style="color:#606266; font-size:14px; margin-bottom:20px; line-height:1.6; text-align:left;">
-                点击下方按钮可从<b>Gitee / GitHub</b>双源下载最新版脚本，<br>下载后<b>拖拽到当前浏览器网页</b>中即可完成更新：
+                点击下方按钮可从<b>Gitee / GitHub</b>下载最新版脚本，<br>下载后<b>拖拽到当前浏览器的油猴页面</b>中完成更新：
             </p>
             <div style="display:flex; flex-direction:column; gap:12px;">
                 <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:bold; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
@@ -342,7 +434,7 @@ const GRADE_MAPPING_CONFIG = {
                     <div style="display:flex; align-items:center; margin-bottom:4px; font-weight:bold; color:#67C23A;">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>代码下载成功！
                     </div>
-                    请在浏览器的下载列表中找到刚刚下载的<b>“翱翔教务功能加强.user.js”</b>，将其<b>直接拖拽到当前浏览器网页中</b>释放鼠标，即可弹出更新界面！
+                    请在浏览器的下载列表中找到刚刚下载的<b>“aoxiang-jwxt-enhance.user.js”</b>，将其<b>拖拽到当前浏览器的油猴页面中</b>，即可完成更新！
                 </div>
 
                 <div style="display:flex; gap:10px; margin-top:5px;">
@@ -372,7 +464,7 @@ const GRADE_MAPPING_CONFIG = {
             proxyBtn.onclick = () => {
                 proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="gm-spin" style="margin-right:6px;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>正在拉取代码，请稍候...';
 
-                // 补充一个简单的动画让等待按钮转起来
+                // 等待按钮旋转动画
                 if (!document.getElementById('gm-spin-style')) {
                     const style = document.createElement('style');
                     style.id = 'gm-spin-style';
@@ -647,8 +739,6 @@ const GRADE_MAPPING_CONFIG = {
                 });
             }
 
-            checkForNewGrades(allGrades);
-
             const finalData = { gpaRankData, allGrades, semesterNames };
             setCachedData(finalData);
             Logger.log('Initial', "数据获取完成，已写入缓存");
@@ -659,151 +749,6 @@ const GRADE_MAPPING_CONFIG = {
         }
     }
 
-    /**
-     * 检查是否有新成绩发布
-     * @param {Array} newGrades 本次抓取到的所有成绩数组
-     */
-    function checkForNewGrades(newGrades) {
-        if (!newGrades || newGrades.length === 0) return;
-
-        // 1. 获取上次存储的成绩快照
-        const oldGradesRaw = GM_getValue(CONSTANTS.GRADES_SNAPSHOT_KEY, null);
-
-        // 2. 如果是第一次运行，直接保存当前数据，不弹窗（避免首次安装就弹窗）
-        if (!oldGradesRaw) {
-            GM_setValue(CONSTANTS.GRADES_SNAPSHOT_KEY, JSON.stringify(newGrades));
-            Logger.log('GradeCheck', '首次运行，建立成绩快照');
-            return;
-        }
-
-        let oldGrades = [];
-        try {
-            oldGrades = JSON.parse(oldGradesRaw);
-        } catch (e) {
-            GM_setValue(CONSTANTS.GRADES_SNAPSHOT_KEY, JSON.stringify(newGrades));
-            return;
-        }
-
-        // 3. 构建旧数据的映射表 (Key: 课程代码, Value: 成绩/绩点组合字符串)
-        // 使用组合字符串是为了检测成绩数值的变化
-        const oldMap = new Map();
-        oldGrades.forEach(g => {
-            oldMap.set(g['课程代码'], `${g['成绩']}-${g['绩点']}`);
-        });
-
-        // 4. 对比找出新成绩
-        const newUpdates = [];
-        newGrades.forEach(g => {
-            const code = g['课程代码'];
-            const currentSig = `${g['成绩']}-${g['绩点']}`;
-
-            // 情况A: 旧数据里没有这门课 (新出的课)
-            // 情况B: 旧数据里有这门课，但是成绩/绩点变了 (更新了成绩)
-            if (!oldMap.has(code) || oldMap.get(code) !== currentSig) {
-                // 排除掉可能是还没出成绩的数据
-                if (g['成绩'] && g['成绩'] !== '-') {
-                    newUpdates.push(g);
-                }
-            }
-        });
-
-        // 5. 如果有更新
-        if (newUpdates.length > 0) {
-            Logger.log('GradeCheck', `发现 ${newUpdates.length} 门新成绩`);
-            // 更新本地存储
-            GM_setValue(CONSTANTS.GRADES_SNAPSHOT_KEY, JSON.stringify(newGrades));
-            // 显示通知
-            showGradeNotification(newUpdates);
-        } else {
-            Logger.log('GradeCheck', '未检测到成绩变化');
-        }
-    }
-
-    /**
-     * 在页面顶部指定位置悬浮显示新成绩通知
-     */
-    function showGradeNotification(courses) {
-        // 防止重复插入
-        if (document.getElementById('gm-new-grade-banner')) return;
-
-        const style = document.createElement('style');
-        style.innerHTML = `
-        .gm-new-grade-banner {
-            position: fixed;
-            top: 110px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 999999;
-
-            background: linear-gradient(135deg, #e6f7ff 0%, #d1edff 100%); /* 浅蓝渐变背景 */
-            border: 1px solid #a6d4fa; /* 浅蓝边框 */
-            color: #004085; /* 深蓝色文字，对比度更高更清晰 */
-            box-shadow: 0 8px 20px rgba(0, 123, 255, 0.15); /* 蓝色的淡淡投影 */
-
-            padding: 15px 30px;
-            border-radius: 50px;
-
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            min-width: 400px;
-            max-width: 80%;
-
-            animation: gmSlideIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        @keyframes gmSlideIn {
-            from { opacity: 0; transform: translate(-50%, -20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
-        }
-
-        .gm-ng-content { display: flex; align-items: center; flex: 1; }
-        .gm-ng-emoji { font-size: 24px; margin-right: 10px; }
-        .gm-ng-title { font-weight: bold; font-size: 16px; margin-right: 10px; color: #0056b3; /* 标题用亮一点的蓝 */ }
-        .gm-ng-list { font-size: 14px; color: #333; font-weight: 500; }
-        .gm-ng-tip { font-size: 12px; color: #6699cc; margin-left: 10px; /* 提示语用灰蓝色 */ }
-
-        .gm-ng-btn {
-            background: #fff;
-            border: 1px solid #a6d4fa;
-            color: #007bff; /* 按钮文字蓝 */
-            padding: 6px 15px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all 0.2s;
-            margin-left: 15px;
-            white-space: nowrap;
-        }
-        .gm-ng-btn:hover {
-            background: #007bff; /* 鼠标悬停变蓝 */
-            color: #fff;         /* 文字变白 */
-            border-color: #007bff;
-            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-        }
-    `;
-        document.head.appendChild(style);
-
-        const banner = document.createElement('div');
-        banner.id = 'gm-new-grade-banner';
-        banner.className = 'gm-new-grade-banner';
-
-        // 构建课程列表字符串
-        const courseText = courses.map(c => `[${c['课程代码']}] ${c['课程名称']}`).join('、');
-
-        banner.innerHTML = `
-        <div class="gm-ng-content">
-            <div>
-                <span class="gm-ng-title">已检测到新成绩发布！</span>
-                <span class="gm-ng-list">${courseText}</span>
-            </div>
-        </div>
-        <button class="gm-ng-btn" onclick="this.parentElement.remove()">知道了</button>
-    `;
-
-        document.body.appendChild(banner);
-    }
     // =-=-=-=-=-=-=-=-=-=-=-=-= 1. 主页初始化与诊断 =-=-=-=-=-=-=-=-=-=-=-=-=
     /**
      * 打印脚本初始化时的详细存储状态诊断报告
@@ -944,16 +889,6 @@ const GRADE_MAPPING_CONFIG = {
         } else {
             setTimeout(runHeavyDataFetch, 1000);
         }
-
-        // 注册控制台调试命令
-        if (typeof unsafeWindow !== 'undefined') {
-            unsafeWindow.nwpuDiag = function () { printStorageDiagnosis(); return "✅ 诊断报告已生成"; };
-            Object.defineProperty(unsafeWindow, 'axjw_test', {
-                get: function () { printStorageDiagnosis(); return "✅ 正在生成报告..."; },
-                configurable: true
-            });
-            console.log("%c[NWPU-Enhanced]调试提示：在控制台输入 'axjw_test' 并按Enter键，可重新显示诊断报告。", "color: gray; font-style: italic;");
-        }
     }
 
     function createFloatingMenu(isEcampus = false) {
@@ -978,7 +913,7 @@ const GRADE_MAPPING_CONFIG = {
                 display: none; flex-direction: column; padding: 6px 0;
                 opacity: 0; transform: translateY(10px); transition: opacity 0.2s, transform 0.2s;
                 border: 1px solid #ebeef5; box-sizing: border-box !important;
-                max-height: 85vh; overflow-y: auto; /* 防止屏幕太小显示不全 */
+                max-height: 85vh; overflow-y: auto;
             }
             .gm-float-menu.show { display: flex; opacity: 1; transform: translateY(0); }
 
@@ -988,7 +923,7 @@ const GRADE_MAPPING_CONFIG = {
 
            /* 分组标题 */
             .gm-menu-group-title {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif !important;
                 font-size: 12px !important; color: #909399 !important; padding: 10px 18px 4px !important;
                 margin-top: 4px !important; border-top: 1px solid #f0f2f5 !important;
                 font-weight: bold !important; pointer-events: none !important; letter-spacing: 1px !important;
@@ -997,7 +932,7 @@ const GRADE_MAPPING_CONFIG = {
 
             /* 菜单项 */
             .gm-menu-item {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif !important;
                 padding: 10px 18px !important;
                 cursor: pointer !important; color: #444 !important; font-size: 14px !important; text-align: left !important;
                 background: transparent !important; border: none !important;
@@ -1006,7 +941,7 @@ const GRADE_MAPPING_CONFIG = {
                 display: flex !important; align-items: center !important; gap: 10px !important;
                 box-sizing: border-box !important; line-height: 1.5 !important; font-weight: normal !important;
             }
-            .gm-menu-item:hover:not(:disabled) { background-color: #f0f7ff !important; color: #007bff !important; }
+            .gm-menu-item:hover:not(:disabled) { background-color: #f0f7ff !important; color: #409EFF !important; }
             .gm-menu-item:disabled { cursor: not-allowed; color: #c0c4cc !important; }
 
             .gm-view-main { display: flex; flex-direction: column; width: 100%; }
@@ -1018,7 +953,7 @@ const GRADE_MAPPING_CONFIG = {
 
         floatBall = document.createElement('div');
         floatBall.className = 'gm-float-ball';
-        floatBall.innerHTML = '⚙<div class="gm-badge"></div>';
+        floatBall.innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><div class="gm-badge"></div>';
         floatBall.title = "翱翔教务功能增强设置";
         document.body.appendChild(floatBall);
 
@@ -1027,11 +962,6 @@ const GRADE_MAPPING_CONFIG = {
 
         const mainView = document.createElement('div');
         mainView.className = 'gm-view-main';
-
-        const updateBtnHtml = `
-        <div class="gm-menu-group-title">关于与更新</div>
-        <button class="gm-menu-item" id="gm-btn-update"><span class="gm-icon">🔄</span> <span id="gm-update-text">检查版本更新</span></button>
-    `;
 
         // 根据环境注入不同的 DOM
         if (isEcampus) {
@@ -1066,8 +996,6 @@ const GRADE_MAPPING_CONFIG = {
         document.body.appendChild(floatMenu);
 
         // 绑定共有事件
-        menuHupanBtn = document.getElementById('gm-btn-hupan');
-        // 绑定共有事件
         const linksBtn = document.getElementById('gm-btn-links');
         if (linksBtn) {
             linksBtn.onclick = () => {
@@ -1098,8 +1026,10 @@ const GRADE_MAPPING_CONFIG = {
             const updateToggleUI = () => {
                 const isPortrait = ConfigManager.enablePortraitEnhancement;
                 const isWatch = ConfigManager.enableCourseWatch;
-                document.getElementById('icon-portrait').textContent = isPortrait ? '☑' : '☐';
-                document.getElementById('icon-watch').textContent = isWatch ? '☑' : '☐';
+                const svgChecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>';
+                const svgUnchecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
+                document.getElementById('icon-portrait').innerHTML = isPortrait ? svgChecked : svgUnchecked;
+                document.getElementById('icon-watch').innerHTML = isWatch ? svgChecked : svgUnchecked;
 
                 document.getElementById('gm-chk-portrait-btn').style.color = isPortrait ? '#333' : '#999';
                 document.getElementById('gm-chk-watch-btn').style.color = isWatch ? '#333' : '#999';
@@ -1187,7 +1117,7 @@ const GRADE_MAPPING_CONFIG = {
     // ----------------- 功能处理函数 -----------------
 
     /**
-     * 处理点击导出按钮`
+     * 处理点击导出按钮
      */
     function handleExportClick() {
         hideMenu();
@@ -1229,12 +1159,10 @@ const GRADE_MAPPING_CONFIG = {
         showSyncDataModal();
     }
 
-    // 在线同步：从教务系统抓取最新选课数据
+    // 在线同步：从教务系统抓取最新选课数据（此处对 ArchiveManager 的引用在用户点击后才执行，其定义见本函数之后）
     async function doSyncCourseData() {
-        const confirmMsg = '【更新选课数据】\n\n' +
-            '此操作将直接通过API获取最新选课数据。\n' +
-            '数据将用于选课页面的”历史余量”参考。\n' +
-            '建议每轮选课开始前执行一次。\n\n' +
+        const confirmMsg = '【更新当前选课学期数据】\n\n' +
+            '此操作将获取当前选课学期数据，数据将用于选课页面的”历史余量”参考。\n' +
             '同步将花费几秒到十几秒，是否开始同步？';
 
         if (!confirm(confirmMsg)) return;
@@ -1252,7 +1180,7 @@ const GRADE_MAPPING_CONFIG = {
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100000; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
         overlay.innerHTML = `
             <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步选课数据...</div>
-            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新有数据的学期...</div>
+            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新选课学期...</div>
             <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
             <div style="font-size:18px;">已获取: <span id="gm-sync-count" style="color:#4facfe; font-weight:bold;">0</span> 条</div>
             <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
@@ -1383,6 +1311,7 @@ const GRADE_MAPPING_CONFIG = {
                 name: course.course?.nameZh || course.nameZh || 'N/A',
                 stdCount: course.stdCount || 0,
                 limitCount: course.limitCount || 0,
+                term: targetSemesterName,
                 time: timestamp
             }));
 
@@ -1425,7 +1354,8 @@ const GRADE_MAPPING_CONFIG = {
             GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(history));
 
             overlay.remove();
-            alert(`同步完成！\n\n已成功抓取【${targetSemesterName}】学期，共存储 ${allCourseData.length} 条课程数据。`);
+            // 游戏式存档：在线同步的新数据静默写入「使用中」的存档（保留自定义命名）
+            ArchiveManager.updateActiveSlot(targetSemesterName);
 
         } catch (e) {
             console.error("同步错误:", e);
@@ -1434,7 +1364,379 @@ const GRADE_MAPPING_CONFIG = {
         }
     }
 
-    // 同步选课数据功能弹窗：在线同步 / 数据导出 / 本地上传
+    // --- 选课数据存档管理（3 个固定槽位：防误操作覆盖、可回溯过往数据） ---
+    const ArchiveManager = {
+        STORAGE_KEY: 'jwxt_sync_archives_v1',
+        SLOT_COUNT: 3,
+        ICONS: {
+            archive: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>',
+            box: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#c0c4cc" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+            // 存档行右侧操作图标（颜色由按钮 style 控制，均为 currentColor）
+            applyIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>',
+            exportIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
+            renameIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>',
+            removeIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>'
+        },
+
+        load() {
+            let state;
+            try {
+                state = JSON.parse(GM_getValue(this.STORAGE_KEY, 'null'));
+            } catch (e) { }
+            if (!state || !Array.isArray(state.slots) || state.slots.length !== this.SLOT_COUNT) {
+                state = { slots: new Array(this.SLOT_COUNT).fill(null), sourceSlot: -1 };
+            }
+            return this.migrateLegacyData(state);
+        },
+
+        // 旧版本升级迁移：已有活跃选课数据但从未建立过存档时，默认将其存入槽位1并设为「使用中」（幂等）
+        migrateLegacyData(state) {
+            if (state.sourceSlot === -1 && state.slots.every(s => !s)) {
+                const history = this.readActiveHistory();
+                if (history && Object.keys(history).length > 0) {
+                    state.slots[0] = {
+                        name: this.buildAutoName(),
+                        semester: '历史数据',
+                        savedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+                        count: Object.keys(history).length,
+                        data: history,
+                        customNamed: false
+                    };
+                    state.sourceSlot = 0;
+                    this.save(state);
+                }
+            }
+            return state;
+        },
+
+        save(state) { GM_setValue(this.STORAGE_KEY, JSON.stringify(state)); },
+
+        // —— 存档定位辅助（游戏式：始终使用三个存档之一） ——
+
+        // 新数据的落槽规则：优先写入「使用中」的存档；全空时默认槽1；否则取第一个空槽
+        targetIndexForNewData(state) {
+            if (state.sourceSlot >= 0 && state.sourceSlot < this.SLOT_COUNT) return state.sourceSlot;
+            const emptyIdx = state.slots.findIndex(s => !s);
+            return emptyIdx === -1 ? 0 : emptyIdx;
+        },
+
+        // 与被删槽位距离最近的非空存档（先找左侧，再找右侧），供删除后自动切换
+        findNearestOccupied(slots, removedIdx) {
+            for (let d = 1; d < this.SLOT_COUNT; d++) {
+                if (removedIdx - d >= 0 && slots[removedIdx - d]) return removedIdx - d;
+                if (removedIdx + d < this.SLOT_COUNT && slots[removedIdx + d]) return removedIdx + d;
+            }
+            return -1;
+        },
+
+        // 生成自动存档名：存档日期时间（如 2026-08-27 14:30）
+        buildAutoName() {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        },
+
+        // 读取当前活跃选课数据（选课助手正在使用的那份）
+        readActiveHistory() {
+            try { return JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); } catch (e) { return {}; }
+        },
+
+        // 统计存档数据覆盖的学期数（以每门课最新记录的 term 标记为准；旧版数据无标记则不计入）
+        countTerms(dataObj) {
+            const terms = new Set();
+            Object.values(dataObj || {}).forEach(records => {
+                const last = (records || [])[records.length - 1];
+                if (last && last.term) terms.add(last.term);
+            });
+            return terms.size;
+        },
+
+        // 槽位规模描述：如「3个学期共15000门课程」；无学期标记的旧数据仅显示课程数
+        describeSlotSize(slot) {
+            const termCount = this.countTerms(slot.data);
+            return termCount > 0 ? `${termCount}个学期共${slot.count}门课程` : `${slot.count}门课程`;
+        },
+
+        // 将数据对象覆盖式写入指定槽位；keepCustomName 时保留用户手动命名的名称
+        writeToSlot(index, historyObj, semesterName, keepCustomName) {
+            if (!historyObj || Object.keys(historyObj).length === 0) {
+                GmDialog.alert({ title: '无法存档', message: '当前没有可存档的选课数据，请先执行在线同步或本地上传。', type: 'warn' });
+                return false;
+            }
+            const state = this.load();
+            const old = state.slots[index];
+            const keepName = keepCustomName && old && old.customNamed;
+            state.slots[index] = {
+                name: keepName ? old.name : this.buildAutoName(),
+                semester: semesterName || '未知学期',
+                savedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+                count: Object.keys(historyObj).length,
+                data: historyObj,
+                customNamed: !!keepName
+            };
+            this.save(state);
+            return true;
+        },
+
+        // 在线同步后静默更新「使用中」的存档（保留自定义命名，刷新数据与元信息）；返回存档名供轻提示
+        updateActiveSlot(semesterName) {
+            const history = this.readActiveHistory();
+            if (!history || Object.keys(history).length === 0) return null;
+            const state = this.load();
+            const idx = this.targetIndexForNewData(state);
+            if (!this.writeToSlot(idx, history, semesterName, true)) return null;
+            if (state.sourceSlot !== idx) {
+                state.sourceSlot = idx;
+                this.save(state);
+            }
+            return this.load().slots[idx].name;
+        },
+
+        // 将槽位存档写回活跃数据并设为「使用中」的存档，供选课助手/历史余量立即生效
+        applyAsSource(index) {
+            const state = this.load();
+            const slot = state.slots[index];
+            if (!slot) return;
+            GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(slot.data));
+            state.sourceSlot = index;
+            this.save(state);
+        },
+
+        // 删除指定槽位存档；若删的是「使用中」存档，自动切换到最近的非空存档继续使用，全部为空则清空活跃数据
+        removeSlot(index) {
+            const state = this.load();
+            state.slots[index] = null;
+            let switchedTo = null;
+            if (state.sourceSlot === index) {
+                const next = this.findNearestOccupied(state.slots, index);
+                state.sourceSlot = next;
+                if (next >= 0) {
+                    GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(state.slots[next].data));
+                    switchedTo = state.slots[next].name;
+                } else {
+                    GM_setValue('course_enrollment_history_auto_sync', '{}');
+                }
+            }
+            this.save(state);
+            return switchedTo;
+        },
+
+        // 手动重命名存档；留空则恢复自动命名
+        renameSlot(index, newName) {
+            const state = this.load();
+            const slot = state.slots[index];
+            if (!slot) return;
+            const trimmed = String(newName || '').trim();
+            if (trimmed) {
+                slot.name = trimmed;
+                slot.customNamed = true;
+            } else {
+                slot.name = this.buildAutoName();
+                slot.customNamed = false;
+            }
+            this.save(state);
+        },
+
+        // 将指定槽位存档导出为 JSON 文件（分享/备份）；时间戳取缓存数据的最新同步时间（而非导出时间）
+        exportSlot(index) {
+            const slot = this.load().slots[index];
+            if (!slot) return;
+            let dataTime = null;
+            Object.values(slot.data || {}).forEach(records => {
+                (records || []).forEach(r => { if (r && r.time && (!dataTime || r.time > dataTime)) dataTime = r.time; });
+            });
+            const exportTime = dataTime || new Date().toLocaleString('zh-CN', { hour12: false });
+            let ts = '';
+            const m = String(dataTime || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
+            if (m) {
+                ts = `${m[1]}${String(m[2]).padStart(2, '0')}${String(m[3]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}${String(m[5]).padStart(2, '0')}`;
+            }
+            const blob = new Blob([JSON.stringify({ exportTime, version: '1.8.3', data: slot.data }, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `翱翔教务选课数据${ts}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+
+        // 注入存档区专用样式（图标按钮 / 使用中徽章）
+        ensureStyles() {
+            if (document.getElementById('gm-archive-style')) return;
+            const style = document.createElement('style');
+            style.id = 'gm-archive-style';
+            style.textContent = `
+            .gm-arc-btn { width:26px; height:26px; border-radius:6px; border:none; background:transparent; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; transition:all .15s; flex-shrink:0; }
+            .gm-arc-btn:hover { background:rgba(64,158,255,.12); }
+            .gm-arc-btn[disabled] { color:#c0c4cc !important; cursor:not-allowed; background:transparent !important; }
+            .gm-arc-badge { font-size:10px; color:#409EFF; background:#ecf5ff; border:1px solid #d9ecff; border-radius:4px; padding:0 5px; line-height:16px; white-space:nowrap; }
+        `;
+            document.head.appendChild(style);
+        },
+
+        // 渲染同步弹窗内的存档槽位列表（游戏式三槽位：每行右侧为 存入/启用/导出/重命名/删除 图标），操作后通过 onChanged 刷新弹窗
+        renderSlotList(container, onChanged) {
+            if (!container) return;
+            this.ensureStyles();
+            const state = this.load();
+            const mkBtn = (act, i, icon, color, tip, extra = '') =>
+                `<button class="gm-arc-btn" data-index="${i}" data-act="${act}" title="${tip}" ${extra} style="color:${color};">${icon}</button>`;
+            const opBtns = (i, isSource) =>
+                mkBtn('apply', i, this.ICONS.applyIcon, '#409EFF', isSource ? '当前正在使用此存档' : '启用此存档作为选课助手数据源', isSource ? 'disabled' : '') +
+                mkBtn('export', i, this.ICONS.exportIcon, '#67C23A', '导出此存档为JSON文件') +
+                mkBtn('rename', i, this.ICONS.renameIcon, '#E6A23C', '重命名存档') +
+                mkBtn('remove', i, this.ICONS.removeIcon, '#F56C6C', '删除此存档');
+
+            container.innerHTML = state.slots.map((slot, i) => {
+                const isSource = state.sourceSlot === i;
+                if (!slot) {
+                    return `
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px dashed #dcdfe6;border-radius:8px;background:#fafafa;">
+                        ${this.ICONS.box}
+                        <span style="font-size:13px;color:#909399;">槽位 ${i + 1}：无存档</span>
+                    </div>`;
+                }
+                return `
+                <div style="border:1px solid ${isSource ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${isSource ? '#f0f7ff' : '#f5f7fa'};padding:10px 12px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="color:#409EFF;display:inline-flex;">${this.ICONS.archive}</span>
+                        <b style="font-size:13px;color:#303133;">${esc(slot.name)}</b>
+                        ${isSource ? '<span class="gm-arc-badge">使用中</span>' : ''}
+                        <span style="margin-left:auto;display:flex;gap:4px;">${opBtns(i, isSource)}</span>
+                    </div>
+                    <div style="font-size:12px;color:#909399;margin-top:6px;">${slot.count} 门课程 · 更新于 ${slot.savedAt}</div>
+                </div>`;
+            }).join('');
+
+            container.onclick = (e) => {
+                const btn = e.target.closest('button[data-act]');
+                if (!btn || btn.disabled) return;
+                const index = parseInt(btn.dataset.index);
+                const act = btn.dataset.act;
+                if (act === 'apply') {
+                    this.applyAsSource(index);
+                    onChanged && onChanged();
+                    showToast(`已启用存档【${state.slots[index].name}】，选课助手正在使用该数据`, 'success');
+                } else if (act === 'export') {
+                    this.exportSlot(index);
+                } else if (act === 'rename') {
+                    this.showRenameDialog(index, state.slots[index].name, newName => {
+                        this.renameSlot(index, newName);
+                        onChanged && onChanged();
+                        showToast(newName.trim() ? '已重命名存档' : '已恢复自动命名', 'success');
+                    });
+                } else if (act === 'remove') {
+                    const slot = state.slots[index];
+                    GmDialog.confirm({ title: '删除存档', message: `确定删除槽位 ${index + 1} 的存档【${slot ? slot.name : ''}】吗？\n删除后不可恢复。`, type: 'error', confirmText: '删除' }).then(ok => {
+                        if (!ok) return;
+                        const switchedTo = this.removeSlot(index);
+                        onChanged && onChanged();
+                        if (switchedTo) showToast(`已删除存档，自动切换至存档【${switchedTo}】`, 'info');
+                        else showToast('已删除存档', 'info');
+                    });
+                }
+            };
+        },
+
+        // 重命名输入弹窗（点击改名图标触发），提交回调 onDone(newName)
+        showRenameDialog(index, curName, onDone) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:100035;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);';
+            overlay.innerHTML = `
+            <div style="background:#fff;border-radius:12px;width:360px;max-width:90%;padding:20px 22px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif;">
+                <b style="font-size:15px;color:#303133;display:block;margin-bottom:12px;">重命名存档（槽位 ${index + 1}）</b>
+                <input id="gm-archive-rename-input" type="text" maxlength="40" value="${esc(curName)}"
+                    style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:13px;color:#303133;outline:none;"
+                    placeholder="输入新的存档名称">
+                <div style="font-size:12px;color:#909399;margin-top:6px;">留空恢复为自动命名</div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                    <button id="gm-archive-rename-cancel" style="padding:7px 16px;border-radius:6px;border:1px solid #dcdfe6;background:#fff;color:#606266;font-size:13px;cursor:pointer;">取消</button>
+                    <button id="gm-archive-rename-ok" style="padding:7px 16px;border-radius:6px;border:none;background:#409EFF;color:#fff;font-size:13px;cursor:pointer;">确定</button>
+                </div>
+            </div>`;
+            document.body.appendChild(overlay);
+            const input = overlay.querySelector('#gm-archive-rename-input');
+            input.focus(); input.select();
+            const close = () => overlay.remove();
+            const submit = () => { onDone(input.value); close(); };
+            overlay.querySelector('#gm-archive-rename-ok').onclick = submit;
+            overlay.querySelector('#gm-archive-rename-cancel').onclick = close;
+            overlay.onclick = e => { if (e.target === overlay) close(); };
+            input.onkeydown = e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') close(); };
+        },
+
+        // 本地上传完成后：必须选择一个槽位存放导入的数据（该槽位同时成为当前使用的存档）
+        promptArchive(summary, semesterName) {
+            return new Promise(resolve => {
+                const state = this.load();
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:100030;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);animation:gmFadeIn 0.2s;';
+                overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;width:440px;max-width:92%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif;">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                        ${this.ICONS.success}
+                        <b style="font-size:16px;color:#303133;">数据导入完成</b>
+                    </div>
+                    <div style="font-size:13px;color:#606266;line-height:1.6;margin-bottom:14px;">${summary}</div>
+                    <div style="font-size:13px;color:#303133;font-weight:600;margin-bottom:4px;">请选择要覆盖的存档槽位：</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        ${state.slots.map((slot, i) => `
+                        <button data-index="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid ${state.sourceSlot === i ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${state.sourceSlot === i ? '#f0f7ff' : '#f5f7fa'};cursor:pointer;text-align:left;transition:background 0.2s;font-size:13px;color:#303133;">
+                            <span style="color:#409EFF;display:inline-flex;">${this.ICONS.archive}</span>
+                            <span>槽位 ${i + 1}：${slot ? esc(slot.name) + '（' + this.describeSlotSize(slot) + '）' : '空'}</span>
+                            ${state.sourceSlot === i ? '<span class="gm-arc-badge">使用中</span>' : ''}
+                        </button>`).join('')}
+                    </div>
+                </div>`;
+                document.body.appendChild(overlay);
+
+                const finish = () => { overlay.remove(); resolve(); };
+                overlay.querySelectorAll('button[data-index]').forEach(btn => {
+                    btn.onclick = () => {
+                        const index = parseInt(btn.dataset.index);
+                        if (this.writeToSlot(index, this.readActiveHistory(), semesterName, true)) {
+                            const st = this.load();
+                            st.sourceSlot = index; // 选定槽位即成为当前使用的存档
+                            this.save(st);
+                            showToast(`导入数据已存入槽位 ${index + 1} 并设为使用中`, 'success');
+                        }
+                        finish();
+                    };
+                });
+            });
+        }
+    };
+
+    // 轻提示 Toast（顶部居中，短暂显示后自动消失）
+    function showToast(message, type = 'success') {
+        const existing = document.getElementById('gm-archive-toast');
+        if (existing) existing.remove();
+        if (!document.getElementById('gm-archive-toast-style')) {
+            const style = document.createElement('style');
+            style.id = 'gm-archive-toast-style';
+            style.textContent = `
+            .gm-arc-toast { position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #fff; color: #303133; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; z-index: 300000; box-shadow: 0 6px 18px rgba(0,0,0,0.15); border-left: 3px solid #67C23A; opacity: 0; transition: all .25s ease-out; pointer-events: none; max-width: 80vw; }
+            .gm-arc-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+            .gm-arc-toast.cancel { border-left-color: #909399; }
+            .gm-arc-toast.info { border-left-color: #409EFF; }
+            .gm-arc-toast.warn { border-left-color: #E6A23C; }
+            .gm-arc-toast.error { border-left-color: #F56C6C; }
+        `;
+            document.head.appendChild(style);
+        }
+        const toast = document.createElement('div');
+        toast.id = 'gm-archive-toast';
+        toast.className = `gm-arc-toast ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('show'));
+        setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2400);
+    }
+
+    // 同步选课数据功能弹窗：在线同步 / 数据导出 / 本地上传 / 数据存档
     function showSyncDataModal() {
         const existing = document.getElementById('gm-sync-modal');
         if (existing) existing.remove();
@@ -1443,71 +1745,44 @@ const GRADE_MAPPING_CONFIG = {
         overlay.id = 'gm-sync-modal';
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:100010; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); animation:gmFadeIn 0.2s;';
         overlay.innerHTML = `
-        <div style="background:#fff; border-radius:12px; width:400px; max-width:92%; padding:22px; box-shadow:0 12px 32px rgba(0,0,0,0.25); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; position:relative;">
+        <div style="background:#fff; border-radius:12px; width:400px; max-width:92%; padding:22px; box-shadow:0 12px 32px rgba(0,0,0,0.25); font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif; position:relative;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
                 <div style="font-size:17px; font-weight:700; color:#303133;">同步最新选课数据</div>
                 <button id="gm-sync-close" style="border:none;background:none;font-size:22px;color:#909399;cursor:pointer;line-height:1;">&times;</button>
             </div>
-            <div style="font-size:13px; color:#909399; margin-bottom:16px; line-height:1.6;">选课数据用于选课页面的“历史余量”参考，按下以下按钮获取或分享数据：</div>
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <button id="gm-sync-online" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
-                    <span style="font-size:20px;">🔄</span>
-                    <span><b>在线同步</b><br><span style="font-size:12px;color:#909399;">从教务系统抓取最新课程数据</span></span>
-                </button>
-                <button id="gm-sync-export" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
-                    <span style="font-size:20px;">⬇️</span>
-                    <span><b>数据导出</b><br><span style="font-size:12px;color:#909399;">导出当前数据，分享给其他同学</span></span>
+                    <span style="display:inline-flex; color:#409EFF;"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                    <span><b>在线同步</b><br><span style="font-size:12px;color:#909399;">从教务系统抓取最新选课学期数据</span></span>
                 </button>
                 <button id="gm-sync-import" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
-                    <span style="font-size:20px;">⬆️</span>
+                    <span style="display:inline-flex; color:#E6A23C;"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
                     <span><b>本地上传</b><br><span style="font-size:12px;color:#909399;">导入他人分享的选课数据</span></span>
                 </button>
+            </div>
+            <div style="margin-top:16px; border-top:1px solid #ebeef5; padding-top:12px;">
+                <div style="font-size:14px; font-weight:600; color:#303133; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                    数据存档
+                </div>
+                <div id="gm-archive-list" style="display:flex; flex-direction:column; gap:8px;"></div>
             </div>
             <input type="file" id="gm-sync-file" accept=".json,application/json" style="display:none;">
         </div>
         `;
         document.body.appendChild(overlay);
+        ArchiveManager.renderSlotList(document.getElementById('gm-archive-list'), showSyncDataModal);
 
         const close = () => overlay.remove();
         document.getElementById('gm-sync-close').onclick = close;
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         document.getElementById('gm-sync-online').onclick = () => { close(); doSyncCourseData(); };
-        document.getElementById('gm-sync-export').onclick = exportSyncData;
         document.getElementById('gm-sync-import').onclick = () => document.getElementById('gm-sync-file').click();
         document.getElementById('gm-sync-file').onchange = (e) => {
             const file = e.target.files[0];
             if (file) importSyncData(file);
             e.target.value = '';
         };
-    }
-
-    // 导出选课数据为 JSON（供分享/备份）
-    function exportSyncData() {
-        let history = {};
-        try { history = JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); } catch (e) { history = {}; }
-        // 时间戳取缓存数据的最新同步时间（记录里的 time），而非导出时间
-        let dataTime = null;
-        Object.values(history).forEach(records => {
-            (records || []).forEach(r => { if (r && r.time && (!dataTime || r.time > dataTime)) dataTime = r.time; });
-        });
-        const exportTime = dataTime || new Date().toLocaleString('zh-CN', { hour12: false });
-        // 将缓存时间(2026/8/21 13:41:03)转为文件名时间戳(20260821T1341)
-        let ts = '';
-        const m = String(dataTime || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{1,2})/);
-        if (m) {
-            ts = `${m[1]}${String(m[2]).padStart(2, '0')}${String(m[3]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}${String(m[5]).padStart(2, '0')}`;
-        }
-        const data = { exportTime, version: '1.8.2', data: history };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `翱翔教务选课数据${ts}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        alert('数据已导出，可分享给其他同学使用。');
     }
 
     // 导入他人分享的选课数据 JSON
@@ -1519,7 +1794,8 @@ const GRADE_MAPPING_CONFIG = {
                 const history = (parsed && parsed.data && typeof parsed.data === 'object') ? parsed.data : parsed;
                 if (!history || typeof history !== 'object') throw new Error('格式不正确');
                 GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(history));
-                alert('导入成功！已更新选课数据。');
+                // 本地上传：由用户确认覆盖哪个存档槽位（选定槽位将成为当前使用的存档）
+                ArchiveManager.promptArchive('导入成功！请选择要覆盖的存档槽位。', '导入数据').then(() => showSyncDataModal());
             } catch (e) {
                 alert('文件格式不正确，请使用本脚本导出的 JSON 文件。');
             }
@@ -1558,7 +1834,7 @@ const GRADE_MAPPING_CONFIG = {
                 border-radius: 12px;
                 box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
                 display: flex; flex-direction: column;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
                 overflow: hidden;
                 border: 1px solid #eee;
             }
@@ -1631,10 +1907,10 @@ const GRADE_MAPPING_CONFIG = {
                     成绩与学业分析
                 </div>
                 <div class="gm-help-step">
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray">∑ GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及“GPA计算器”。
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及“GPA计算器”。
                 </div>
                 <div class="gm-help-step">
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray">⇩ 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
                 </div>
             </div>
 
@@ -1645,13 +1921,13 @@ const GRADE_MAPPING_CONFIG = {
                 </div>
                 <div class="gm-help-step">
                     <b>第1步：历史选课数据同步</b><br>
-                    在每一轮选课开始前，点击悬浮球菜单中的 <span class="gm-tag gm-tag-blue">↻ 同步最新选课学期数据</span>。脚本会自动跳转并后台抓取选课人数信息。完成同步后，该数据可在意愿值选课阶段显示课程内置情况/上一轮选课情况。
+                    在每一轮选课开始前，点击悬浮球菜单中的 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 同步最新选课学期数据</span>。脚本会自动跳转并后台抓取选课人数信息。完成同步后，该数据可在意愿值选课阶段显示课程内置情况/上一轮选课情况。
                 </div>
                 <div class="gm-help-step">
                     <b>第2步：课程关注与排课</b><br>
-                    在“全校开课查询”页面，点击课程左侧的 <span class="gm-tag gm-tag-red">❤</span> 收藏课程。<br>
-                    在“培养方案”页面，课程代码会自动高亮并显示最新学期的教学班信息，点击课程旁的 <span class="gm-tag gm-tag-red">❤</span> 收藏课程。<br>
-                    然后打开悬浮球菜单 <span class="gm-tag gm-tag-blue">❤ 课程关注列表</span>，切换右上角到 <b>“课表视图”</b>，可直观查看当前已关注课程的课表情况。
+                    在“全校开课查询”页面，点击课程左侧的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
+                    在“培养方案”页面，课程代码会自动高亮并显示最新学期的教学班信息，点击课程旁的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
+                    然后打开悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#409EFF" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> 课程关注列表</span>，切换右上角到 <b>“课表视图”</b>，可直观查看当前已关注课程的课表情况。
                 </div>
                 <div class="gm-help-step">
                     <b>第3步：正式选课</b><br>
@@ -1974,7 +2250,7 @@ const GRADE_MAPPING_CONFIG = {
             .gm-modal-close { border: none; background: none; font-size: 24px; color: #999; cursor: pointer; padding: 0 10px; display:flex; align-items:center; }
             .gm-tabs { display: flex; gap: 20px; margin-left: 30px; height: 100%; }
             .gm-tab-item { display: flex; align-items: center; height: 100%; font-size: 14px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; padding: 0 5px; font-weight: 500; }
-            .gm-tab-item.active { color: #007bff; border-bottom-color: #007bff; }
+            .gm-tab-item.active { color: #409EFF; border-bottom-color: #409EFF; }
             .gm-filter-bar { padding: 10px 20px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 15px;}
             .gm-filter-group { display: flex; align-items: center; gap: 10px; }
             .gm-filter-label { font-size: 13px; color: #606266; }
@@ -1990,8 +2266,8 @@ const GRADE_MAPPING_CONFIG = {
             .gm-code-badge { background: #f4f4f5; color: #909399; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
             .gm-btn-unfollow { padding: 4px 10px; font-size: 12px; border-radius: 3px; border: 1px solid #fab6b6; color: #f56c6c; background: #fef0f0; cursor: pointer; }
             .gm-timetable { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; border: 1px solid #e0e0e0; font-size: 12px; }
-            .gm-timetable th { background: #f8f9fa; color: #333; font-weight: bold; padding: 8px; text-align: center; border: 1px solid #ddd; height: 36px; }
-            .gm-timetable td { border: 1px solid #ddd; height: auto; }
+            .gm-timetable th { background: #f8f9fa; color: #333; font-weight: bold; padding: 8px; text-align: center; border: 1px solid #ebeef5; height: 36px; }
+            .gm-timetable td { border: 1px solid #ebeef5; height: auto; }
             .gm-tt-period { position: relative; padding: 0 !important; vertical-align: top; width: 50px; height: 1px; }
             .gm-period-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
             .gm-period-num { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #555; font-weight: bold; width: 100%; }
@@ -2023,7 +2299,7 @@ const GRADE_MAPPING_CONFIG = {
             <div class="gm-modal-content">
                 <div class="gm-modal-header">
                     <div style="display:flex; align-items:center;">
-                        <div class="gm-modal-title">❤ 课程关注列表</div>
+                        <div class="gm-modal-title"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px; margin-right:6px;" fill="#f56c6c" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>课程关注列表</div>
                         <div class="gm-tabs">
                             <div class="gm-tab-item active" data-tab="list">列表视图</div>
                             <div class="gm-tab-item" data-tab="timetable">课表视图</div>
@@ -2124,7 +2400,13 @@ const GRADE_MAPPING_CONFIG = {
 
         document.getElementById('gm-btn-clear-all').onclick = () => {
             const targetName = state.semester === 'all' ? '所有' : state.semester;
-            if (confirm(`⚠️ 确定要取消关注【${targetName}】下的所有课程吗？`)) {
+            GmDialog.confirm({
+                title: '取消关注确认',
+                message: `确定要取消关注【${targetName}】下的所有课程吗？`,
+                type: 'warn',
+                confirmText: '确定取消'
+            }).then(ok => {
+                if (!ok) return;
                 const idsToRemove = courseList
                     .filter(c => state.semester === 'all' || (c.semester || '历史关注') === state.semester)
                     .map(c => c.id);
@@ -2132,7 +2414,7 @@ const GRADE_MAPPING_CONFIG = {
                 courseList = courseList.filter(c => !idsToRemove.includes(c.id));
                 if (courseList.length === 0) { closeModal(); handleShowFollowedClick(); }
                 else refreshView();
-            }
+            });
         };
 
         const btnContainer = document.querySelector('.gm-modal-body');
@@ -2163,16 +2445,16 @@ const GRADE_MAPPING_CONFIG = {
             style.id = 'export-ui-styles';
             style.textContent = `
     .semester-bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10001; display: none; transition: all 0.3s; }
-    .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
     .semester-checkbox-container h3 { margin: 0 0 20px 0; font-size: 18px; color: #1f1f1f; display: flex; align-items: center; gap: 8px; font-weight: 600; }
     .gm-semester-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 320px; overflow-y: auto; padding: 4px; margin-bottom: 20px; }
     .gm-semester-item { display: flex; align-items: center; padding: 10px 12px; background: #f5f7fa; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; font-size: 14px; color: #444; user-select: none; }
-    .gm-semester-item:hover { background: #eef5fe; border-color: #b3d8ff; color: #007bff; }
+    .gm-semester-item:hover { background: #eef5fe; border-color: #b3d8ff; color: #409EFF; }
     .gm-semester-item input[type='checkbox'] { margin-right: 10px; width: 16px; height: 16px; cursor: pointer; }
     .button-container { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
     .semester-checkbox-container button { padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; border: none; }
-    .confirm-export-button { background-color: #007bff; color: white; }
-    .confirm-export-button:hover { background-color: #0069d9; transform: translateY(-1px); }
+    .confirm-export-button { background-color: #409EFF; color: white; }
+    .confirm-export-button:hover { background-color: #66b1ff; transform: translateY(-1px); }
     .select-all-button { background-color: #f0f2f5; color: #595959; border: 1px solid #d9d9d9 !important; }
     .cancel-button { background-color: transparent; color: #8c8c8c; }
     .gm-semester-list::-webkit-scrollbar { width: 6px; }
@@ -2296,7 +2578,7 @@ const GRADE_MAPPING_CONFIG = {
             validGradesForGpa.push({ ...grade, '学分': credits, '成绩': score, '绩点': finalGp });
             const numericScore = parseFloat(score);
             if (!isNaN(numericScore)) { totalScoreCreditsNumericOnly += numericScore * credits; totalCreditsNumericOnly += credits; }
-            if (!isNaN(numericScore)) { totalScoreCreditsWithMapping += numericScore * credits; totalCreditsWithMapping += credits; } else if (typeof score === 'string' && GRADE_MAPPING_CONFIG.hasOwnProperty(score)) { totalScoreCreditsWithMapping += GRADE_MAPPING_CONFIG[score] * credits; totalCreditsWithMapping += credits; }
+            if (!isNaN(numericScore)) { totalScoreCreditsWithMapping += numericScore * credits; totalCreditsWithMapping += credits; } else if (typeof score === 'string' && CONSTANTS.GRADE_MAPPING_CONFIG.hasOwnProperty(score)) { totalScoreCreditsWithMapping += CONSTANTS.GRADE_MAPPING_CONFIG[score] * credits; totalCreditsWithMapping += credits; }
         });
 
         const weightedScoreNumeric = totalCreditsNumericOnly > 0 ? (totalScoreCreditsNumericOnly / totalCreditsNumericOnly) : 0;
@@ -2328,7 +2610,7 @@ const GRADE_MAPPING_CONFIG = {
             style.id = styleId;
             style.textContent = `
             .gpa-report-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out; }
-            .gpa-report-modal { background-color: #f5f7fa; border-radius: 12px; width: 880px; max-width: 95%; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
+            .gpa-report-modal { background-color: #f5f7fa; border-radius: 12px; width: 880px; max-width: 95%; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
             .gpa-modal-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
             .gpa-modal-title { font-size: 18px; font-weight: 600; color: #303133; display: flex; align-items: center; gap: 8px;}
             .gpa-close-btn { border: none; background: transparent; font-size: 26px; color: #909399; cursor: pointer; line-height: 1; transition: color 0.2s; padding: 0; }
@@ -2351,7 +2633,7 @@ const GRADE_MAPPING_CONFIG = {
             .gpa-report-modal summary { padding: 14px 18px; font-weight: 600; font-size: 15px; color: #303133; cursor: pointer; list-style: none; outline: none; transition: background 0.2s; user-select: none; }
             .gpa-report-modal summary:hover { background: #f0f7ff; color: #409EFF; }
             .gpa-report-modal summary::-webkit-details-marker { display: none; }
-            .gpa-report-modal summary::before { content: '▶'; margin-right: 10px; font-size: 12px; display: inline-block; transition: transform 0.2s; color: #909399; }
+            .gpa-report-modal summary::before { content: ''; width: 12px; height: 12px; margin-right: 10px; display: inline-block; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909399'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E") no-repeat center / contain; transition: transform 0.2s; }
             .gpa-report-modal details[open] > summary::before { transform: rotate(90deg); }
             .gpa-report-modal details[open] > summary { border-bottom: 1px solid #ebeef5; background: #fafafa; }
 
@@ -2373,7 +2655,7 @@ const GRADE_MAPPING_CONFIG = {
             document.head.appendChild(style);
         }
 
-        const mappingConfigString = Object.entries(GRADE_MAPPING_CONFIG).map(([key, value]) => `${key}: ${value}`).join(', ');
+        const mappingConfigString = Object.entries(CONSTANTS.GRADE_MAPPING_CONFIG).map(([key, value]) => `${key}: ${value}`).join(', ');
         const tooltipTextWithMapping = `使用百分制成绩和中文等级制分数进行计算\n您可以在脚本最上面配置参数，当前参数：\n${mappingConfigString}。`;
 
         const overlay = document.createElement('div');
@@ -2383,7 +2665,7 @@ const GRADE_MAPPING_CONFIG = {
 
         let contentHTML = `
         <div class="gpa-modal-header">
-            <div class="gpa-modal-title">∑ GPA综合分析报告</div>
+            <div class="gpa-modal-title"><svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-3px; margin-right:8px;" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>GPA综合分析报告</div>
             <button class="gpa-close-btn" title="关闭">&times;</button>
         </div>
         <div class="gpa-modal-body">
@@ -2496,7 +2778,7 @@ const GRADE_MAPPING_CONFIG = {
             resultDisplayA.style.display = 'block';
 
             if (isNaN(nextCredits) || nextCredits <= 0 || isNaN(nextGpa) || nextGpa < 1.0 || nextGpa > 4.1) {
-                resultDisplayA.textContent = '⚠️ 请输入有效的学分与GPA\n(GPA应在1.0-4.1之间)';
+                resultDisplayA.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:5px;" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与GPA (GPA应在1.0-4.1之间)';
                 resultDisplayA.style.color = '#F56C6C';
                 resultDisplayA.style.background = '#fef0f0';
                 return;
@@ -2521,7 +2803,7 @@ const GRADE_MAPPING_CONFIG = {
             resultDisplayB.style.display = 'block';
 
             if (isNaN(targetGpa) || targetGpa < 1.0 || targetGpa > 4.1 || isNaN(nextCredits) || nextCredits <= 0) {
-                resultDisplayB.textContent = '⚠️ 请输入有效的学分与期望GPA';
+                resultDisplayB.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:5px;" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与期望GPA';
                 resultDisplayB.style.color = '#F56C6C';
                 resultDisplayB.style.background = '#fef0f0';
                 return;
@@ -3036,11 +3318,14 @@ const GRADE_MAPPING_CONFIG = {
         },
 
         init() {
+            // 幂等守卫：防止路由分发与历史遗留入口造成重复初始化（重复注入控制面板）
+            if (this._initialized) return;
             if (!window.location.href.includes('/student/for-std/lesson-search')) return;
             if (!document.querySelector('.page-config') || !document.querySelector('#table')) {
                 setTimeout(() => this.init(), 300);
                 return;
             }
+            this._initialized = true;
 
             Logger.log("2.5", "初始化选课记录模块...");
             this.injectControlPanel();
@@ -3128,22 +3413,22 @@ const GRADE_MAPPING_CONFIG = {
             const panel = document.createElement('div');
             panel.id = 'gm-lesson-helper-panel';
             panel.innerHTML = `
-            <div style="background:#f8f9fa; border-bottom:1px solid #dee2e6; padding:10px; border-radius:8px 8px 0 0; font-weight:bold; position:relative; cursor:move; user-select:none;" id="gm-panel-header">
+            <div style="background:#f5f7fa; border-bottom:1px solid #ebeef5; padding:10px; border-radius:12px 12px 0 0; font-weight:bold; position:relative; cursor:move; user-select:none; color:#303133;" id="gm-panel-header">
                 选课助手
                 <span id="gm-panel-close" style="position:absolute; right:10px; color:#999; cursor:pointer; font-size:18px; line-height:1; font-weight:bold;" title="关闭面板 (刷新页面可恢复)">×</span>
             </div>
             <div style="padding:15px;">
-                <select id="gm-sync-semester" style="width:100%; padding:6px; margin-bottom:10px; border-radius:4px; border:1px solid #ccc; font-size:14px; outline:none; cursor:pointer;">
+                <select id="gm-sync-semester" style="width:100%; padding:6px; margin-bottom:10px; border-radius:4px; border:1px solid #dcdfe6; font-size:14px; outline:none; cursor:pointer;">
                     <option value="">加载学期列表中...</option>
                 </select>
-                <button id="gm-btn-sync-start" style="width:100%; padding:8px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold; transition: background 0.2s;">存储选定学期课程信息</button>
-                <button id="gm-btn-clear-hist" style="width:100%; padding:8px; background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px; transition: background 0.2s;">清除所有记录</button>
-                <div style="margin-top:12px; font-size:12px; color:#666; line-height:1.5;">
+                <button id="gm-btn-sync-start" style="width:100%; padding:8px; background:#409EFF; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold; transition: background 0.2s;">存储选定学期课程信息</button>
+                <button id="gm-btn-clear-hist" style="width:100%; padding:8px; background:#F56C6C; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px; transition: background 0.2s;">清除所有记录</button>
+                <div style="margin-top:12px; font-size:12px; color:#909399; line-height:1.5;">
                     建议在每轮选课开始前执行一次。
                 </div>
             </div>
         `;
-            panel.style.cssText = `position:fixed; top:120px; right:30px; z-index:99999; background:white; border:1px solid #ccc; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); width:240px; font-size:14px; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;`;
+            panel.style.cssText = `position:fixed; top:120px; right:30px; z-index:99999; background:white; border:1px solid #ebeef5; border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.15); width:240px; font-size:14px; font-family:"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;`;
             document.body.appendChild(panel);
 
             const btnSync = document.getElementById('gm-btn-sync-start');
@@ -3152,8 +3437,8 @@ const GRADE_MAPPING_CONFIG = {
 
             btnClose.onclick = () => { panel.style.display = 'none'; };
             btnSync.onclick = () => this.startSyncProcess(false);
-            btnSync.onmouseover = () => btnSync.style.background = '#0056b3';
-            btnSync.onmouseout = () => btnSync.style.background = '#007bff';
+            btnSync.onmouseover = () => btnSync.style.background = '#66b1ff';
+            btnSync.onmouseout = () => btnSync.style.background = '#409EFF';
 
             btnClear.onclick = () => {
                 if (confirm('确定清空所有本地存储的课程历史数据吗？')) {
@@ -3162,8 +3447,8 @@ const GRADE_MAPPING_CONFIG = {
                     this.renderHistoryTags();
                 }
             };
-            btnClear.onmouseover = () => btnClear.style.background = '#c82333';
-            btnClear.onmouseout = () => btnClear.style.background = '#dc3545';
+            btnClear.onmouseover = () => btnClear.style.background = '#f78989';
+            btnClear.onmouseout = () => btnClear.style.background = '#F56C6C';
 
             const header = document.getElementById('gm-panel-header');
             let isDragging = false, startX, startY, initialLeft, initialTop;
@@ -3202,7 +3487,7 @@ const GRADE_MAPPING_CONFIG = {
             try {
                 // 【自动模式】：寻找最新有数据的学期
                 if (isAuto) {
-                    overlay = this.showOverlay("正在通过API寻找最新有数据的学期...");
+                    overlay = this.showOverlay("正在寻找最新选课学期...");
                     let foundValid = false;
                     const optionsList = Array.from(gmSelect.options).filter(o => o.value);
 
@@ -3236,12 +3521,12 @@ const GRADE_MAPPING_CONFIG = {
                 else {
                     targetSemesterName = gmSelect.options[gmSelect.selectedIndex].text;
                     targetSemesterId = gmSelect.value;
-                    if (!confirm(`即将通过API抓取【${targetSemesterName}】的数据。\n过程可能需要几秒到十几秒，请勿关闭页面。`)) return;
+                    if (!confirm(`即将抓取【${targetSemesterName}】的数据。\n过程可能需要几秒到十几秒，请勿关闭页面。`)) return;
                     overlay = this.showOverlay(targetSemesterName);
                 }
 
                 // --- 通过 API 分页获取全部数据（并行请求） ---
-                this.updateOverlayStatus("正在通过API获取课程数据...");
+                this.updateOverlayStatus("正在获取课程数据...");
                 const pageSize = this.CONFIG.PAGE_SIZE;
 
                 // 第一次请求：获取 totalPages 信息
@@ -3277,7 +3562,9 @@ const GRADE_MAPPING_CONFIG = {
 
                 if (allCourseData.length > 0) {
                     this.saveToHistory(allCourseData);
-                    alert(`同步完成！\n\n已成功抓取【${targetSemesterName}】学期，共存储 ${allCourseData.length} 条课程数据。\n页面即将刷新以更新状态。`);
+                    overlay.remove();
+                    // 游戏式存档：在线同步的新数据静默写入「使用中」的存档（保留自定义命名），随后刷新页面
+                    ArchiveManager.updateActiveSlot(targetSemesterName);
                     window.location.reload();
                 } else {
                     alert(`【${targetSemesterName}】学期暂无课程数据。`);
@@ -3330,6 +3617,7 @@ const GRADE_MAPPING_CONFIG = {
                 name: course.course?.nameZh || course.nameZh || 'N/A',
                 stdCount: course.stdCount || 0,
                 limitCount: course.limitCount || 0,
+                term: semesterName,
                 time: timestamp
             }));
         },
@@ -3429,13 +3717,7 @@ const GRADE_MAPPING_CONFIG = {
         }
     };
 
-    if (window.location.href.includes('/student/for-std/lesson-search')) {
-        if (document.readyState === 'loading') {
-            window.addEventListener('DOMContentLoaded', () => LessonSearchEnhancer.init());
-        } else {
-            LessonSearchEnhancer.init();
-        }
-    }
+    // 注：开课查询页的初始化入口已统一收归 runMainFeatures 路由分发（见文件末尾），此处不再单独绑定。
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.6 课程关注 =-=-=-=-=-=-=-=-=-=-=-=-=
     /** 教师名可点击跳转教师主页【旧版：开课查询，直接绑定 onclick】 */
     function enhanceTeacherNames(row) {
@@ -3543,39 +3825,7 @@ const GRADE_MAPPING_CONFIG = {
     function injectFollowButtons() {
         if (!ConfigManager.enableCourseWatch) return;
 
-        // --- 1. 初始化弹窗样式 (Toast) ---
-        if (!document.getElementById('gm-toast-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-toast-style';
-            style.textContent = `
-            .gm-toast {
-                position: fixed; top: 30px; left: 50%; transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.8); color: #fff; padding: 12px 24px;
-                border-radius: 6px; font-size: 14px; z-index: 99999; font-weight: 500;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.2); pointer-events: none;
-                opacity: 0; transition: opacity 0.3s, transform 0.3s;
-                display: flex; align-items: center; letter-spacing: 0.5px;
-            }
-            .gm-toast.show { opacity: 1; transform: translateX(-50%) translateY(10px); }
-            .gm-toast-icon { margin-right: 10px; font-size: 16px; font-weight: bold; }
-        `;
-            document.head.appendChild(style);
-        }
-
-        const showToast = (message, type = 'success') => {
-            const existing = document.querySelector('.gm-toast');
-            if (existing) existing.remove();
-            const toast = document.createElement('div');
-            toast.className = 'gm-toast';
-            const icon = type === 'success' ? '✔' : '✖';
-            const iconColor = type === 'success' ? '#67C23A' : '#F56C6C';
-            toast.innerHTML = `<span class="gm-toast-icon" style="color:${iconColor}">${icon}</span><span>${message}</span>`;
-            document.body.appendChild(toast);
-            requestAnimationFrame(() => toast.classList.add('show'));
-            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2000);
-        };
-
-        // --- 2. 获取学期信息 ---
+        // --- 1. 获取学期信息 ---
         let currentSemester = "未知学期";
         try {
             const semesterEl = document.querySelector('.selectize-control.semester .item') ||
@@ -3627,7 +3877,7 @@ const GRADE_MAPPING_CONFIG = {
             // --- 创建按钮 ---
             const btn = document.createElement('div');
             btn.className = 'gm-follow-btn';
-            btn.innerHTML = '❤';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
             btn.style.cssText = `cursor: pointer; font-size: 20px; margin-top: 4px; line-height: 1; user-select: none; transition: all 0.2s; font-family: sans-serif;`;
 
             const updateState = () => {
@@ -3663,7 +3913,7 @@ const GRADE_MAPPING_CONFIG = {
                         id: storageId,
                         code: displayCode,
                         name, teachers, credits, timeAndPlace,
-                        semester: currentSemester, // 【新增】保存当前学期
+                        semester: currentSemester, // 保存当前学期
                         addedTime: new Date().toLocaleString()
                     });
                     showToast(`已加入关注列表 ${displayCode}`, 'success');
@@ -3729,7 +3979,6 @@ const GRADE_MAPPING_CONFIG = {
 
             function forceUpdateUI() {
                 if (!courseCodeToLessonIdMap) return;
-                // console.log('[选课助手] 数据更新，刷新UI...');
                 const tables = document.querySelectorAll('.el-table__body');
                 const currentMode = getSelectionMode();
                 tables.forEach(tableBody => {
@@ -3891,7 +4140,7 @@ const GRADE_MAPPING_CONFIG = {
                         displayElement.textContent = ` (上次记录: ${stdCount}/${limitCount})`;
                         displayElement.title = `同步于 ${time}`;
                         Object.assign(displayElement.style, {
-                            color: isFull ? '#dc3545' : '#28a745',
+                            color: isFull ? '#F56C6C' : '#67C23A',
                             fontWeight: 'bold', fontSize: '12px', marginLeft: '5px'
                         });
                         targetContainer.appendChild(displayElement);
@@ -4011,26 +4260,9 @@ const GRADE_MAPPING_CONFIG = {
 
                     // --- 注入交互式关注按钮 ---
                     if (nameEl) {
-                        // 补全样式
-                        if (!document.getElementById('gm-toast-style')) {
-                            const style = document.createElement('style');
-                            style.id = 'gm-toast-style';
-                            style.textContent = `.gm-toast{position:fixed;top:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:12px 24px;border-radius:6px;font-size:14px;z-index:99999;font-weight:500;box-shadow:0 4px 15px rgba(0,0,0,0.2);pointer-events:none;opacity:0;transition:opacity 0.3s,transform 0.3s;display:flex;align-items:center;}.gm-toast.show{opacity:1;transform:translateX(-50%) translateY(10px);}.gm-toast-icon{margin-right:10px;font-size:16px;font-weight:bold;}`;
-                            document.head.appendChild(style);
-                        }
-                        const showToast = (message, type = 'success') => {
-                            const existing = document.querySelector('.gm-toast'); if (existing) existing.remove();
-                            const toast = document.createElement('div'); toast.className = 'gm-toast';
-                            const iconColor = type === 'success' ? '#67C23A' : '#F56C6C';
-                            toast.innerHTML = `<span class="gm-toast-icon" style="color:${iconColor}">${type === 'success' ? '✔' : '✖'}</span><span>${message}</span>`;
-                            document.body.appendChild(toast);
-                            requestAnimationFrame(() => toast.classList.add('show'));
-                            setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2000);
-                        };
-
                         const btn = document.createElement('span');
                         btn.className = 'gm-follow-btn';
-                        btn.innerHTML = '❤';
+                        btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
                         btn.style.cssText = `cursor: pointer; font-size: 18px; margin-left: 8px; line-height: 1; user-select: none; transition: all 0.2s; display: inline-block; vertical-align: middle;`;
                         btn.title = "点击关注课程";
 
@@ -4478,7 +4710,7 @@ const GRADE_MAPPING_CONFIG = {
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
                 border-radius: 12px; padding: 0;
                 width: 440px;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
                 display: none; opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
                 pointer-events: auto;
                 transform: translateY(5px);
@@ -4715,7 +4947,7 @@ const GRADE_MAPPING_CONFIG = {
                                  data-teachers="${teacherText}" data-place="${placeText}"
                                  data-credits="${c.credits || ''}"
                                  data-semester="${c.semester}"
-                                 title="${isFollowed ? '取消关注' : '关注此班级'}">❤</div>
+                                 title="${isFollowed ? '取消关注' : '关注此班级'}"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
                         </div>
                         <div class="gm-pt-meta">
                             <div class="gm-pt-row">${svgs.user} <span>${teacherText}</span></div>
@@ -4881,7 +5113,7 @@ const GRADE_MAPPING_CONFIG = {
                     background: #fff; padding: 12px; border-radius: 8px;
                     box-shadow: 0 4px 25px rgba(0,0,0,0.15);
                     border: 1px solid #dcdfe6;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
                     animation: gmSlideUp 0.5s ease-out;
                     width: auto; max-width: 680px;
                 }
@@ -5008,8 +5240,6 @@ const GRADE_MAPPING_CONFIG = {
 
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.11 自动评教模块 =-=-=-=-=-=-=-=-=-=-=-=-=
     function initEvaluationHelper() {
-        const IS_TEST_MODE = false; // 正式使用请设为 false
-
         if (window.gm_eval_observer_started) return;
         window.gm_eval_observer_started = true;
 
@@ -5045,7 +5275,7 @@ const GRADE_MAPPING_CONFIG = {
             style.id = 'gm-eval-style';
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-            .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
+            .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
             .gm-modal-header { padding: 18px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
             .gm-modal-title { font-size: 18px; font-weight: 700; color: #303133; letter-spacing: 0.5px; }
             .gm-close-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #909399; transition: all 0.2s; }
@@ -5154,10 +5384,10 @@ const GRADE_MAPPING_CONFIG = {
                     <div style="flex:1;"></div>
                     <div style="display:flex; gap:10px;">
                         <button id="gm-btn-min-eval" class="gm-btn gm-btn-warning" title="跳过已完成课程，未完成课程只评第一个">
-                            ⚡ 自动完成最低评教
+                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>自动完成最低评教
                         </button>
                         <button id="gm-btn-run-selected" class="gm-btn gm-btn-primary">
-                            ▶ 开始评教
+                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"></path></svg>开始评教
                         </button>
                     </div>
                 </div>
@@ -5466,13 +5696,13 @@ const GRADE_MAPPING_CONFIG = {
 
                 let finishMsg = "所有任务处理完成！";
                 if (downgradedCourses.length > 0) {
-                    finishMsg += `\n\n⚠️ 检测到优秀率限制，以下课程已自动降为 89 分：\n` + downgradedCourses.join('\n');
+                    finishMsg += `\n\n检测到优秀率限制，以下课程已自动降为 89 分：\n` + downgradedCourses.join('\n');
                 }
                 finishMsg += "\n\n建议刷新页面更新状态。是否刷新？";
 
-                if (confirm(finishMsg)) {
-                    window.location.reload();
-                }
+                GmDialog.confirm({ title: '评教流程完成', message: finishMsg, type: downgradedCourses.length > 0 ? 'warn' : 'success', confirmText: '刷新页面' }).then(ok => {
+                    if (ok) window.location.reload();
+                });
             };
 
             // --- 功能 A: 自动完成最低评教 ---
@@ -5537,12 +5767,12 @@ const GRADE_MAPPING_CONFIG = {
                 });
 
                 let msg = `即将对 ${itemsToRun.length} 位教师进行评教。`;
-                if (hasEmptyScore) msg += `\n\n⚠️ 注意：部分未填分，默认按 95分 (优秀) 处理。`;
+                if (hasEmptyScore) msg += `\n\n注意：部分未填分，默认按 95分 (优秀) 处理。`;
                 msg += `\n\n是否开始？`;
 
-                if (confirm(msg)) {
-                    executeTasks(itemsToRun);
-                }
+                GmDialog.confirm({ title: '开始评教', message: msg, type: hasEmptyScore ? 'warn' : 'info', confirmText: '开始' }).then(ok => {
+                    if (ok) executeTasks(itemsToRun);
+                });
             };
         };
 
@@ -6343,7 +6573,7 @@ const GRADE_MAPPING_CONFIG = {
             .gm-textbook-wrapper {
                 margin: 20px; padding: 20px; background: #fff;
                 border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
             }
             .gm-textbook-title {
                 font-size: 16px; font-weight: bold; color: #303133; margin-bottom: 15px;
@@ -6441,7 +6671,7 @@ const GRADE_MAPPING_CONFIG = {
 
                     rowsHtml += `
                     <td colspan="6" class="gm-online-cell">
-                        <span style="margin-right:8px;">☁在线开放课程</span>
+                        <span style="margin-right:8px;"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:3px;" stroke="#909399" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>在线开放课程</span>
                         <span>平台：${platformDisplay}</span>
                         ${linkHtml}
                     </td>
@@ -6483,11 +6713,12 @@ const GRADE_MAPPING_CONFIG = {
         }
     };
 
+    // 教材模块【阶段1】：必须在页面自身 XHR 发出前挂载拦截器，故在加载期执行（内部防重复）
     try {
         TextbookInfoModule.installHook();
     } catch (e) { console.error(e); }
 
-    // --- 3. 脚本主入口 (路由分发) ---
+    // --- 3. 脚本主入口（路由分发，全部页面初始化的唯一入口） ---
 
     function runMainFeatures() {
         const href = window.location.href;
@@ -6525,8 +6756,9 @@ const GRADE_MAPPING_CONFIG = {
             setTimeout(initEvaluationHelper, 2000); // 兜底
         }
 
-        // 2. 开课查询页面
+        // 2. 开课查询页面（统一入口：2.5 选课记录同步面板 + 2.6 课程关注按钮）
         else if (href.includes('/student/for-std/lesson-search')) {
+            LessonSearchEnhancer.init();
             if (document.body) initLessonSearchPage();
         }
 
@@ -6598,8 +6830,9 @@ const GRADE_MAPPING_CONFIG = {
         }
     }
 
+    // 统一等待 DOM 就绪后再做路由分发（document-start 注入时 readyState 必为 loading）
     if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', runMainFeatures);
+        window.addEventListener('DOMContentLoaded', runMainFeatures, { once: true });
     }
     else {
         runMainFeatures();
