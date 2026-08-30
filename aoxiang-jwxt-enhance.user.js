@@ -8,6 +8,7 @@
 // @match        https://jwxt.nwpu.edu.cn/student/for-std/course-select/some-page*
 // @match        https://ecampus.nwpu.edu.cn/*
 // @match        https://teacher.nwpu.edu.cn/*
+// @match        https://yjsjy.nwpu.edu.cn/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -244,7 +245,7 @@
                 title: "友情链接快捷访问",
                 titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
                 links: [
-                    { name: "湖畔资料", url: "https://nwpushare.cn", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5.2 8 4.5 5.5 4.5H5c-.8 0-1.5.7-1.5 1.5v6.5c0 .8.7 1.5 1.5 1.5h.5c2.5 0 4.8.7 6.5 2 1.7-1.3 4-2 6.5-2h.5c.8 0 1.5-.7 1.5-1.5V6c0-.8-.7-1.5-1.5-1.5h-.5C16 4.5 13.7 5.2 12 6.5z"></path><line x1="12" y1="6.5" x2="12" y2="16"></line><path d="M3.5 19.5c1.4 1 2.9 1 4.3 0s2.9-1 4.3 0 2.9 1 4.3 0 2.9-1 4.3 0"></path></svg>' },
+                    { name: "湖畔资料", url: "http://nwpushare.cn", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5.2 8 4.5 5.5 4.5H5c-.8 0-1.5.7-1.5 1.5v6.5c0 .8.7 1.5 1.5 1.5h.5c2.5 0 4.8.7 6.5 2 1.7-1.3 4-2 6.5-2h.5c.8 0 1.5-.7 1.5-1.5V6c0-.8-.7-1.5-1.5-1.5h-.5C16 4.5 13.7 5.2 12 6.5z"></path><line x1="12" y1="6.5" x2="12" y2="16"></line><path d="M3.5 19.5c1.4 1 2.9 1 4.3 0s2.9-1 4.3 0 2.9 1 4.3 0 2.9-1 4.3 0"></path></svg>' },
                     { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAP6klEQVR42u2be5TV1XXHP/uc333NnTsvZoYZYAYYBURUEIPiI8EopaZ5ra6mpjapSVOjMUGWiQpp7Vos2rQ2XSGmWXkRXUlXQ+wyts1qXsZQISgK8hgkiMr7ISAMMxeYx339fuec/nHuDIyoMDgkxrDX+i3uupd7z29/z3fv/d37/AbO23k7b+ftvP3hmpzuP9y+5IrYyCAzPbSu618+vXLHOw0A9WYfLllyRaxOVT2C1msQ2fiLZz73Zed+1PAHA8BeVf2JRFJ/pFgKmdg8uvJ9V141H1Nc63Z/5wvu4/c0vqNDYOH3Z9WERm1A0VYZT/KZP34/tVXVHrL/2A/ruw4Q6B8SuX+Xb//rS+84BpQidXcsrtuiyHDT5e+itroGlIPVXbCuCwI9Gq3nE7DWzZu/1M1bcN07hgH3f/ePxjsVtRtnayaNGsMnb5iDCNAXwdd2QmcJdPmrIqA1GGMQnsTJN6hLPi6LFkW/twywKvpCEFc1gdLMvnQaohQEAquycLh4wnkA5yCKADRKz0H4Cdn8U27uglvdp+7L/N4xYMGS2a1am02RMzXTWtu4ZdaNgIXjITy4E7pDUKepnlp7ZhizFeF7FMMfypIHD/xeMEBpc2ssrmq0aK6eNNlDFAisOwrZ0umdBzDGs0JkEir4MvHYBjdvwYNu3j2XvK0Z8PnFM1OpqlS7U+6isSMauX3OnyBKoGD87ne8hv5nvIoq54koh8jPcPY71FWslEWL7NuKAcnqipmiZVIUWaaNa0OCwDv8cu+psT8UcxaiEKACpW4GWU42v8LNve8Wd8896bcNAOLch3Ugkk4kmDR6DFgL1sHGYz7ZvVXrT5jOgVLvQetHKOq17q75X3CfvbfpdwrA7UuuiDm4IQwNY0bUU1OZARwcLcGuHGg1vCsb4y+lLkYHi9Gq3d01/yvuzvmTfycANOqqNhE3MYosbSObfcxq8c53h6cRzYBSoLT/dyhmjQ8PkWZ0cA8Ba91d83/g5t577W8DgGBgQ7CXx2JBwjporW/wNBVge99pEpxgrGVd9giv5HOMTCSZUVNHSukhAmH9JVKJ1h/HcIubN38ZTr51LoVVcCI+1TQEKuJxGqqqPQBFA/vzb1r68sZw/9bf8MuOQxjncMDSaVdxZV29d+hs84SIRumbsPYmunJr3NwF3yQR/VgWL+47JyEguMnGWKoq0qSTSRAH3dGb136laD+e5aeHDxIowQFTq6qZnKl+60mzHwhrQeuZaPWDc5EwFcDChQsVSIu1jpp0Gh0Env5HQ8jbN+4ZnWNUMsWYZAXWwXvq6vnKxdPIBLHhqRqDEmZ0csLc6Obe96D73IJLhyUEci3L0jESI6y1VKXSXriI9btv7BsnNucYX1HJ0mlXkQ1LTKmsQint6/65MGv8pVQTOribKLrD3TX/l4h7mNqK/5NFi0pnxYDAJSscVDoHlcmk33EBeiJwp6fq6FQFl1bXokTOnfOvTZhRCEIKrf8U1M/J5le7uxbc5e6+u3nIANjApATiAMlY7MSnOXPm8frahKcUiBANZyi8WZ5QajpafR2TaHfz5n/DzbtnxpkzQJTGoX0jV6a7A6KzvHml2Hgsy7wX2vmzDc/wcm+P7w6H1D+ID8Uz1RUDDRhNqOBzOP2Mmzd/mdvyrb9y7pGRpy+DZzUzfn3nV3V1cPeWjfREESLQ44XOqYlRpBxi7pTfWPrKbp7KHuFTLW3MHEpJ7dcTkYsxqXo2E6tmUwoPudLSJ5ZtXPfzn7VvfP7rdz61fRADImcNggEw/QsJEB+6/DXW8s09O+gzBi3CxHSGKVXVvqd4jfP7cn0UbHQq0s6xrPMwy44c5s7N61l+5NDQFKYrt/Cz68AZULrJ2vATLx7Y+6N0TK394sM3Xj0IAF2yRSAEKIYnCa7K4KxYkFSavDWktObu8ROpCGKDd1kpnjxymA9vWMU/bH8R+zr0r48nSGhF0Vr+bfc28l4cndkNhBbePQIuyvgwdrCsfSMHOrpIJIIahZk7CIBYXOWdIy8CuWLB36sDamNDjl0twj9OuoT7L5jM96deyQ0NTYPpK0I+ivj6nu3kjeHxjkPs6uvx8X6SfbBxFIJgnKOzVCJvzlAJhw4uSMNNI30J15pDnUd4duuLBFpjIgvIuxYunJUcAODFPUdyCMdFhO58rpzVHdTHIaFOXwpfQ98xqQo+PX4Cl1XXvm7sdhULvFrMExdFyVmOhqXBTLOW6+sb+fsLJzO1qoa54y6kNp44vbgyDqoD+OhoSCmwgjWGx9vXkS+VEJH+SGzMtcTqBgB4bNGLJXHukNKKY319WBOBBeringXWDb08GfOGiasmFqcmiJMzhowOGJOqONU55/hYy3h+NP1qbhkzDjmd8w7fvd48GsakPPUDzXNbX+LlA/uJaT3wuw4qAh1WDeoFnMhOrYRjfX30FQr+zZSG8WmP7DDW7spYnHvbJnJFTS3zxk+gOZl6/d3tB/B0FcCVd/9DTTC1Gkqe+q92HuFXm9pRSg2Qujz40daqxOAyaPmNiNBXLNDRfYxMZaVXdZdmYE12mAWMZc7IUcxpaPKx/1bVY2Thxka4vt6/FqFYLPLjNc+QKxZRSpNKWFrqSuw+kiS0oLS4wd1gzK6LImuNNew+fKg81nZwYSU0J4eXBSfv6lt1vmRhZh18cKS/R+cT7c/XP8eejsMopUknLFe29dEyor9VEKMjVxwEQCzNC864VwKt2XbwADYK/Y9VaLimbvgBGA4rWZhWDX8+6oSoCgJWbdnMc9u3EgQBgYLLWnNUpQx7jiQIjQAUStb2DQJg0c0re4EnY3HNgWwXBzq7/FgstDCjFlpTZy+Nz5XzU6rgY2MgpnyABwGbd+7g8Y3r0UrhrNBQFVKfiegtaPZ1xftblO5UKtV96sGI8IiNnAtNxPqd27xC62fBB5p8lnVvE+cvqYJPtEBSe3YGAdv37+O/1qzCOoeIH9BUpUxZfjiU4N93roMdV/WeAkCX6XnKGLchkYjxm7276Tya9RI0tDAlAzfU+9e/K3NllTezFj7Z6qtU2fldB/fzn0//mmIY+ra8f2RX8hUgFbe0jiiCCErUzkXlQ5lBAHz3jg0hIotVuRqs2LLphBKMHLxvJLyrxu/Ab9si5xn4oWb4yxbfp/Tv/Cv7WLpyOX2FIvqknkGJo7MnoBj692rSBqXAOTa94dlglzn+32HJrkol42zctZOt+/ZCEHj0lcBfjPGJ57cFgnV+rZYU3DEO5jR6zVBOeJt2bGfpU8vpLRS5aFTI1NbcoK86JwNRa6wQhQ7RbvUbAvDdOzaE4ux9xriCA/533RqO93T7ULDOI39rC1w3wtPRunPreDqADzbB3DaYmPZrisIBKza18+gzKymGEZmkML6hSH1VRCxwGCtkkpZLWnIkAodzcOh4HGPsgUBs+0Dv8nprP/3Tvfuve//YRCIVzDrel+Pw0SxTWscRBIG/MS0+CVUGsDsHeePZIcPguHGe7pmYB/mjoz3jBDCADujN5/if1at4+qUtiCicU1w4skBjdUi+pNhzJEFzbcj08TmqKwyIsONwkgPdKTD20S/9zcrHTjsQicfcP4cFc11FKv7ebQcP8OjTv+aj776eRCxWPsBwMKseJqThiQ7Y3A1F68EZChj9MtY6X85GJWF6DUyvhvrECSYoBUrY+spefrLuOTqOHyUZ02jlaK4tMa6hCEC2NyCdsFzWkkMrT/ttrybZdSSJUjbUWj90xjOfBd+eNU7H1fIgUOPz+RITR43mI9e+h5pMVf9TISdOjPflYP0xf5LcVfJUdeUV5DVPlDhOfLdCQ0MCLkzD5IzXGyntWWDdwCM4x7q7Wb75edbv2M6o2gJj6z3VA+VIxhwijkKoWL29krH1RdoaPSC7OxJs3l9BKqmIStFj/3Tbr28e0tDriw+99wqt+YnWalS+UKIhU80HZsxkcuvYwcPQQPzN5iI4VISDBX+kfjyEQjlXKIGkgkzgO82RCWhM+I4zXs4x/XJW+XlgXy7H+h1beealF8n29jGlJWRiUwHnBPFynsgIx3Kalw+mONoXMHNCL/WZCGdhzY5KjuVjgDumnJv5pdtWbB3y1G/BwzdeHoh9NIjpCYWCr7OXt13ArClTaayt8zy29sR5oi6DIf2pmJPYwODP7EmsEPEHrDiy3cfZuGsnG3Zuo7O7G6U0mZTj2om9aHGIQHdes6sjQXde0VfUA/l45oV91GdCwkh4dnuGvAkwkb39gdtWPHTWY8/7H37vWAcPxxJ6dlgyhGFEOpnkktZxTL9gAq0j6tHxeNmZk643mvgOTH6l/3kiunM59nQc4oV9e9nx6kF6C3m0UiilMFYYW1/kstYc1gmlSFi9vZLjOY0S0NqvVZmwXHlBL6m4pbegWbu3mnzOfu2BT6/4/Fue+y78/qxkZPTfobhPa0mGJUNkDYEOaKqppW1kM+MbR9JYXUMmlSIRBIjS5VXE08A5jDEUw5CeQp7O7m4OZrvY19nBq0ez9OTzGAuBVmXZKgOiZkZbHw1VISKw43CSLa+kqK+KaBlRIp2wCI6KhCUZsygFOzvTbN4dezh10N65aNHKaLgG3/ztQ9dfqwN5QCn1bmcdxjiMtVhrESUkY3HSiSTpZJJULE4sCFBKiIyhFEXkikV/lYqUwhBX1u5KFEoJY+pKNFSFOCf0FRWhEeoqDY0Z73whFFZty1BfGXFpS45AO5wTlHJERigazavH4mw/GPvK1kzDFx+7+TEznJN/z4aFF8fDsU23CtwbBDLJn1/agTG/xeGsK4e/Qw1ivvir/JqTUsTU1hyj60qD3uv/nnNe2z+/t4JcUXPdpB5iZZGjBA4dj7E3W0F3jmxvTt331c8++b23/Lj8aRPkktnVQWA/Hg/sZytSXOwchKFDgJi2BGXJ3p3ThFYGFuyXqSfbRaPyTGgqYGw/7f1gt2SEYqjo7AnY1xWnt6CZ1FzgolF5jBW0gp5SjGe3pSmV+EWkzILFt618YVj+XuBM7YnnL0urUvwDAe6vBTcrmVBJ8OGBc+zrTLBpX8rvpoMRmYgRlRHWCWEk1KQNzTWlkxoZ2J+Ns7sjQTESIiNEVlDiK801E3qpr7IoLYQl6/Z2Jla270l9dfFnlv+MITTtci5k/HMbZ0wJrX2/sW6OODdVBap+Z0cF2w8lUFgmNecZO6KIiBsoFA6w/TuvHAeycTbtrcAh/SLQP7Mowtj6EhMbey0i2xz8ysJj11+x4VkRhtyhnRMATrYVz81o6uwLpjy/J3m5ieTyhupw4oy23jHOSY0IySAQ1EnSWYBiKDz9ciW5omCtsyL0OeuyIrIvGeOlqyf2bErFzVpVTGy55po1ec7ln8ycgxNteWL1zFolbkRCmwZRts5ErlaJaD+chmxvYNfvSvc6a7tVTGfFuq6gynaVx3bn7bydt/N23s7bMNn/A5XlWTqBYXJAAAAAAElFTkSuQmCC" alt="">' },
                     { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' },
                     { name: "瓜拼白车", url: "https://nwpu.codepix.top", desc: "瓜大人自己的在线免费拼车平台", bg: "#e8f1fb", color: "#004EA2", svg: '<svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" fill="#004EA2"/><path d="M143.659 195.051C148.947 192.473 153.174 188.348 155.687 183.31L176.915 141.608L200.441 95.3858C202.932 90.6315 203.735 85.2618 202.733 80.0506C201.8 75.1446 199.287 70.6155 195.528 67.0632C191.683 63.3665 186.71 60.8584 181.284 59.8794C175.858 58.9005 170.243 59.4982 165.2 61.5914L114.885 82.0646L69.5273 100.383C64.2418 102.471 59.7973 106.051 56.8206 110.617C53.8438 115.184 52.4851 120.506 52.9361 125.835C53.3639 130.987 55.5264 135.886 59.1164 139.834C63.0327 144.226 68.4897 147.191 74.5231 148.206L99.8811 153.006L104.225 177.225C105.167 182.884 108.227 188.056 112.865 191.827C117.038 195.302 122.288 197.457 127.857 197.981C133.325 198.535 138.842 197.512 143.659 195.051ZM121.612 174.313L115.98 143.401C115.767 142.223 115.173 141.132 114.279 140.273C113.384 139.414 112.231 138.828 110.971 138.592L78.01 132.352C76.0257 131.914 74.2418 130.9 72.9166 129.457C71.5914 128.014 70.7936 126.217 70.6389 124.326C70.4842 122.436 70.9805 120.549 72.056 118.94C73.1315 117.331 74.7304 116.083 76.621 115.376L121.98 96.976L172.427 76.5043C174.188 75.7668 176.151 75.5533 178.049 75.8928C179.947 76.2324 181.686 77.1086 183.03 78.4016C184.374 79.6946 185.257 81.3413 185.558 83.1169C185.859 84.8924 185.563 86.7101 184.711 88.3215L161.14 134.544L139.913 176.246C139.14 178.046 137.754 179.561 135.968 180.559C134.182 181.557 132.093 181.984 130.019 181.774C127.946 181.564 126.002 180.73 124.484 179.397C122.966 178.065 121.957 176.308 121.612 174.395L121.612 174.313Z" fill="white"/><path d="M124.046 120.104L141.851 103.924C143.533 102.412 145.793 101.584 148.135 101.623C150.476 101.661 152.706 102.563 154.335 104.13C155.964 105.697 156.858 107.801 156.821 109.979C156.783 112.156 155.817 114.229 154.135 115.741L136.33 131.921C134.648 133.434 132.387 134.262 130.046 134.223C127.705 134.184 125.474 133.282 123.845 131.715C122.217 130.148 121.323 128.044 121.36 125.867C121.398 123.689 122.364 121.616 124.046 120.104Z" fill="white"/></svg>' }
@@ -1907,34 +1908,46 @@
                     成绩与学业分析
                 </div>
                 <div class="gm-help-step">
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及“GPA计算器”。
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及”GPA计算器”。
                 </div>
                 <div class="gm-help-step">
                     点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
+                </div>
+                <div class="gm-help-step">
+                    <b>学生画像增强：</b>进入”学生画像”页面，脚本会自动修正顶部卡片的平均分算法，并优化底部”计划外课程”的表格显示（增加教学班排名）。
                 </div>
             </div>
 
             <!-- 模块：选课助手 -->
             <div class="gm-help-section">
                 <div class="gm-help-sec-title" style="border-color:#409EFF;">
-                    选课助手
+                    选课助手与数据存档
                 </div>
                 <div class="gm-help-step">
-                    <b>第1步：历史选课数据同步</b><br>
-                    在每一轮选课开始前，点击悬浮球菜单中的 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 同步最新选课学期数据</span>。脚本会自动跳转并后台抓取选课人数信息。完成同步后，该数据可在意愿值选课阶段显示课程内置情况/上一轮选课情况。
+                    <b>第1步：同步选课数据</b><br>
+                    在”全校开课查询”页面，右侧会自动弹出<b>选课助手面板</b>。在下拉框中选择学期（列表每屏最多显示10项，可滚动查看全部学期），点击 <span class="gm-tag gm-tag-blue">存储选定学期课程信息</span> 按钮，脚本会抓取该学期的课程信息。<br>
+                    数据会存储到<b>三槽位存档系统</b>中，支持在线同步、本地上传、数据导出等功能。
                 </div>
                 <div class="gm-help-step">
-                    <b>第2步：课程关注与排课</b><br>
-                    在“全校开课查询”页面，点击课程左侧的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
-                    在“培养方案”页面，课程代码会自动高亮并显示最新学期的教学班信息，点击课程旁的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
-                    然后打开悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#409EFF" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> 课程关注列表</span>，切换右上角到 <b>“课表视图”</b>，可直观查看当前已关注课程的课表情况。
+                    <b>第2步：管理存档</b><br>
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 选课数据存档</span>，可以：<br>
+                    - 查看三个存档槽位的数据状态<br>
+                    - 选择某个存档作为当前使用的数据源<br>
+                    - 导出存档数据或上传本地数据<br>
+                    - 接收其他用户分享的选课数据
                 </div>
                 <div class="gm-help-step">
-                    <b>第3步：正式选课</b><br>
-                    进入“选课”页面：<br>
-                    - <b>意愿值选课：</b>显示上次同步时的“历史余量/上限”。<br>
-                    - <b>直选选课：</b>自动显示“待释放名额”。<br>
-                    - <b>关注课程高亮：</b>已关注的课程背景会高亮显示，方便用户定位。<br>
+                    <b>第3步：课程关注与排课</b><br>
+                    在”全校开课查询”页面，点击课程左侧的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
+                    在”培养方案”页面，课程代码会自动高亮并显示最新学期的教学班信息，点击课程旁的 <span class="gm-tag gm-tag-red"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#F56C6C" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 收藏课程。<br>
+                    然后打开悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" fill="#409EFF" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg> 课程关注列表</span>，切换右上角到 <b>”课表视图”</b>，可直观查看当前已关注课程的课表情况。
+                </div>
+                <div class="gm-help-step">
+                    <b>第4步：正式选课</b><br>
+                    进入”选课”页面：<br>
+                    - <b>意愿值选课：</b>显示存档中的”历史余量/上限”数据。<br>
+                    - <b>直选选课：</b>自动显示”待释放名额”。<br>
+                    - <b>关注课程高亮：</b>已关注的课程背景会高亮显示，方便快速定位。
                 </div>
             </div>
 
@@ -1945,15 +1958,7 @@
                 </div>
                 <div class="gm-help-step">
                     <b>一键自动评教：</b>进入评教页面，点击右上角的 <span class="gm-tag gm-tag-blue">打开自动评教</span> 按钮。
-                    按照操作可以任意给分评教或指定给分。
-                </div>
-                 <div class="gm-help-step">
-                    <b>人员检索：</b>悬浮球菜单点击 <span class="gm-tag gm-tag-gray">人员信息检索</span>，输入姓名/学号/工号可查询具体信息。
-                </div>
-                <div class="gm-help-step">
-                </div>
-                <div class="gm-help-step">
-                    <b>学生画像增强：</b>进入“学生画像”页面，脚本会自动修正顶部卡片的平均分算法，并优化底部“计划外课程”的表格显示（增加教学班排名）。
+                    支持任意给分评教或指定给分评教。
                 </div>
             </div>
 
@@ -3313,6 +3318,8 @@
             API_BASE: '/student/for-std/lesson-search/semester',
             API_FIELDS: 'course.code,minorCourse.nameZh,courseType,openDepartment,teacherAssignmentList,examMode,campus,teachLang,roomType,timeTableLayout,crossBizTypes,courseProperty',
             PAGE_SIZE: 1000, // 使用 queryPage__ 参数格式，服务端支持最大1000条/页
+            MAX_VISIBLE_SEMESTERS: 10, // 学期下拉列表每屏最多显示条数（超出可滚动查看）
+            SEMESTER_ITEM_HEIGHT: 32, // 下拉列表单项高度(px)，用于计算列表最大高度
             // 保留 DOM 选择器用于渲染历史标签
             TABLE_ROWS: '#table tbody tr'
         },
@@ -3331,59 +3338,20 @@
             this.injectControlPanel();
             this.renderHistoryTags();
 
-            // 通过API获取学期列表
-            const gmSelect = document.getElementById('gm-sync-semester');
-            if (gmSelect && this.CONFIG.STUDENT_ID) {
-                const fetchSemesterList = () => {
-                    return new Promise((resolve, reject) => {
-                        const url = '/student/for-std/lesson-search/index/' + this.CONFIG.STUDENT_ID;
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('GET', url);
-                        xhr.onload = function () {
-                            if (xhr.status === 200) {
-                                try {
-                                    const html = xhr.responseText;
-                                    const parser = new DOMParser();
-                                    const doc = parser.parseFromString(html, 'text/html');
-                                    const options = doc.querySelectorAll('#semester option[value]');
-                                    const semesterList = [];
-                                    options.forEach(opt => {
-                                        const val = opt.getAttribute('value');
-                                        const text = opt.textContent.trim();
-                                        if (val && text && val !== '') {
-                                            semesterList.push({ value: val, text: text });
-                                        }
-                                    });
-                                    resolve(semesterList);
-                                } catch (e) {
-                                    reject(new Error('HTML解析失败: ' + e.message));
-                                }
-                            } else {
-                                reject(new Error('请求失败: HTTP ' + xhr.status));
-                            }
-                        };
-                        xhr.onerror = function () {
-                            reject(new Error('网络请求失败'));
-                        };
-                        xhr.send();
-                    });
-                };
-
-                fetchSemesterList().then(semesterOptions => {
+            // 通过API获取学期列表并渲染到自定义下拉框（全部学期，滚动查看）
+            if (this.CONFIG.STUDENT_ID) {
+                this.fetchSemesterList().then(semesterOptions => {
                     if (semesterOptions.length > 0) {
                         semesterOptions.sort((a, b) => parseInt(b.value) - parseInt(a.value));
-                        let optionsHtml = '';
-                        semesterOptions.forEach(opt => {
-                            optionsHtml += `<option value="${opt.value}">${opt.text}</option>`;
-                        });
-                        gmSelect.innerHTML = optionsHtml;
+                        this.renderSemesterDropdown(semesterOptions);
+                        Logger.log("2.5", `已加载 ${semesterOptions.length} 个学期`);
                         this.syncSemesterSelect();
                     } else {
-                        gmSelect.innerHTML = '<option value="">未找到学期数据</option>';
+                        this.setSemesterPlaceholder('未找到学期数据');
                     }
                 }).catch(e => {
                     Logger.error("2.5", "API获取学期列表失败: " + e.message);
-                    gmSelect.innerHTML = '<option value="">加载失败，请刷新页面重试</option>';
+                    this.setSemesterPlaceholder('加载失败，请刷新页面重试');
                 });
             }
 
@@ -3396,14 +3364,108 @@
             observer.observe(target, { childList: true, subtree: true });
         },
 
+        fetchSemesterList() {
+            return new Promise((resolve, reject) => {
+                const url = '/student/for-std/lesson-search/index/' + this.CONFIG.STUDENT_ID;
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', url);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        try {
+                            const html = xhr.responseText;
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+                            const options = doc.querySelectorAll('#semester option[value]');
+                            const semesterList = [];
+                            options.forEach(opt => {
+                                const val = opt.getAttribute('value');
+                                const text = opt.textContent.trim();
+                                if (val && text && val !== '') {
+                                    semesterList.push({ value: val, text: text });
+                                }
+                            });
+                            resolve(semesterList);
+                        } catch (e) {
+                            reject(new Error('HTML解析失败: ' + e.message));
+                        }
+                    } else {
+                        reject(new Error('请求失败: HTTP ' + xhr.status));
+                    }
+                };
+                xhr.onerror = function () {
+                    reject(new Error('网络请求失败'));
+                };
+                xhr.send();
+            });
+        },
+
         syncSemesterSelect() {
             const originalSemester = document.querySelector('.selectize-control.semester .item');
-            const gmSelect = document.getElementById('gm-sync-semester');
-            if (originalSemester && gmSelect && document.activeElement !== gmSelect && gmSelect.options.length > 1) {
+            const list = document.getElementById('gm-semester-dd-list');
+            // 用户正在展开下拉列表手动选择时不覆盖
+            if (originalSemester && this.semesterOptions && this.semesterOptions.length > 0 && (!list || list.style.display === 'none')) {
                 const semName = originalSemester.innerText.trim();
-                Array.from(gmSelect.options).forEach(opt => {
-                    if (opt.text === semName) opt.selected = true;
+                if (this.selectedSemester && this.selectedSemester.text === semName) return;
+                const match = this.semesterOptions.find(o => o.text === semName);
+                if (match) this.selectSemester(match);
+            }
+        },
+
+        // --- 自定义学期下拉框（全部学期，列表每屏最多显示 MAX_VISIBLE_SEMESTERS 项，可滚动） ---
+        renderSemesterDropdown(semesterOptions) {
+            this.semesterOptions = semesterOptions;
+            const list = document.getElementById('gm-semester-dd-list');
+            if (!list) return;
+            list.innerHTML = '';
+            semesterOptions.forEach(opt => {
+                const item = document.createElement('div');
+                item.dataset.value = opt.value;
+                item.textContent = opt.text;
+                item.title = opt.text;
+                item.style.cssText = `height:${this.CONFIG.SEMESTER_ITEM_HEIGHT}px; box-sizing:border-box; padding:7px 10px; font-size:13px; line-height:18px; cursor:pointer; color:#606266; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
+                item.onmouseover = () => { if (item.dataset.selected !== '1') item.style.background = '#f5f7fa'; };
+                item.onmouseout = () => { if (item.dataset.selected !== '1') item.style.background = ''; };
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    this.selectSemester(opt);
+                    this.toggleSemesterList(false);
+                };
+                list.appendChild(item);
+            });
+            if (semesterOptions.length > 0) this.selectSemester(semesterOptions[0]);
+        },
+
+        selectSemester(opt) {
+            this.selectedSemester = opt;
+            const text = document.getElementById('gm-semester-dd-text');
+            if (text) {
+                text.textContent = opt.text;
+                text.style.color = '#303133';
+            }
+            const list = document.getElementById('gm-semester-dd-list');
+            if (list) {
+                Array.from(list.children).forEach(el => {
+                    const isSel = el.dataset.value === opt.value;
+                    el.dataset.selected = isSel ? '1' : '0';
+                    el.style.background = isSel ? '#f0f7ff' : '';
+                    el.style.color = isSel ? '#409EFF' : '#606266';
+                    el.style.fontWeight = isSel ? 'bold' : 'normal';
                 });
+            }
+        },
+
+        toggleSemesterList(force) {
+            const list = document.getElementById('gm-semester-dd-list');
+            if (!list) return;
+            const show = (force !== undefined) ? force : (list.style.display === 'none');
+            list.style.display = show ? 'block' : 'none';
+        },
+
+        setSemesterPlaceholder(msg) {
+            const text = document.getElementById('gm-semester-dd-text');
+            if (text) {
+                text.textContent = msg;
+                text.style.color = '#c0c4cc';
             }
         },
 
@@ -3415,16 +3477,17 @@
             panel.innerHTML = `
             <div style="background:#f5f7fa; border-bottom:1px solid #ebeef5; padding:10px; border-radius:12px 12px 0 0; font-weight:bold; position:relative; cursor:move; user-select:none; color:#303133;" id="gm-panel-header">
                 选课助手
-                <span id="gm-panel-close" style="position:absolute; right:10px; color:#999; cursor:pointer; font-size:18px; line-height:1; font-weight:bold;" title="关闭面板 (刷新页面可恢复)">×</span>
+                <span id="gm-panel-close" style="position:absolute; right:10px; color:#999; cursor:pointer; font-size:18px; line-height:1; font-weight:bold;" title="关闭面板">×</span>
             </div>
             <div style="padding:15px;">
-                <select id="gm-sync-semester" style="width:100%; padding:6px; margin-bottom:10px; border-radius:4px; border:1px solid #dcdfe6; font-size:14px; outline:none; cursor:pointer;">
-                    <option value="">加载学期列表中...</option>
-                </select>
+                <div id="gm-semester-dd" style="position:relative; margin-bottom:10px;">
+                    <div id="gm-semester-dd-trigger" style="width:100%; box-sizing:border-box; padding:6px 28px 6px 8px; border-radius:4px; border:1px solid #dcdfe6; font-size:14px; cursor:pointer; background:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:border-color 0.2s;">
+                        <span id="gm-semester-dd-text" style="color:#c0c4cc;">加载学期列表中...</span>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#c0c4cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div id="gm-semester-dd-list" style="display:none; position:absolute; top:calc(100% + 4px); left:0; width:100%; box-sizing:border-box; max-height:${this.CONFIG.MAX_VISIBLE_SEMESTERS * this.CONFIG.SEMESTER_ITEM_HEIGHT}px; overflow-y:auto; background:#fff; border:1px solid #e4e7ed; border-radius:4px; box-shadow:0 2px 12px rgba(0,0,0,0.12); z-index:10;"></div>
+                </div>
                 <button id="gm-btn-sync-start" style="width:100%; padding:8px; background:#409EFF; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold; transition: background 0.2s;">存储选定学期课程信息</button>
-                <button id="gm-btn-clear-hist" style="width:100%; padding:8px; background:#F56C6C; color:white; border:none; border-radius:4px; cursor:pointer; margin-top:10px; transition: background 0.2s;">清除所有记录</button>
-                <div style="margin-top:12px; font-size:12px; color:#909399; line-height:1.5;">
-                    建议在每轮选课开始前执行一次。
                 </div>
             </div>
         `;
@@ -3432,23 +3495,21 @@
             document.body.appendChild(panel);
 
             const btnSync = document.getElementById('gm-btn-sync-start');
-            const btnClear = document.getElementById('gm-btn-clear-hist');
             const btnClose = document.getElementById('gm-panel-close');
+            const semesterDd = document.getElementById('gm-semester-dd');
+            const semesterTrigger = document.getElementById('gm-semester-dd-trigger');
 
             btnClose.onclick = () => { panel.style.display = 'none'; };
-            btnSync.onclick = () => this.startSyncProcess(false);
+            btnSync.onclick = () => this.startSyncProcess();
             btnSync.onmouseover = () => btnSync.style.background = '#66b1ff';
             btnSync.onmouseout = () => btnSync.style.background = '#409EFF';
 
-            btnClear.onclick = () => {
-                if (confirm('确定清空所有本地存储的课程历史数据吗？')) {
-                    GM_setValue(this.CONFIG.HISTORY_KEY, '{}');
-                    alert('已清空。');
-                    this.renderHistoryTags();
-                }
-            };
-            btnClear.onmouseover = () => btnClear.style.background = '#f78989';
-            btnClear.onmouseout = () => btnClear.style.background = '#F56C6C';
+            semesterTrigger.onclick = (e) => { e.stopPropagation(); this.toggleSemesterList(); };
+            semesterTrigger.onmouseover = () => semesterTrigger.style.borderColor = '#409EFF';
+            semesterTrigger.onmouseout = () => semesterTrigger.style.borderColor = '#dcdfe6';
+            document.addEventListener('click', (e) => {
+                if (semesterDd && !semesterDd.contains(e.target)) this.toggleSemesterList(false);
+            });
 
             const header = document.getElementById('gm-panel-header');
             let isDragging = false, startX, startY, initialLeft, initialTop;
@@ -3468,9 +3529,8 @@
         },
 
         // --- 2. Core: 同步逻辑（API 直接获取） ---
-        async startSyncProcess(isAuto) {
-            const gmSelect = document.getElementById('gm-sync-semester');
-            if (!gmSelect || gmSelect.options.length <= 1) {
+        async startSyncProcess() {
+            if (!this.selectedSemester || !this.selectedSemester.value) {
                 alert("学期列表仍在加载中或加载失败，请稍等后再试。");
                 return;
             }
@@ -3480,50 +3540,15 @@
                 return;
             }
 
-            let targetSemesterId = '';
-            let targetSemesterName = '';
+            const targetSemesterId = this.selectedSemester.value;
+            const targetSemesterName = this.selectedSemester.text;
+
+            if (!confirm(`即将抓取【${targetSemesterName}】的数据。\n过程可能需要几秒到十几秒，请勿关闭页面。`)) return;
+
             let overlay = null;
 
             try {
-                // 【自动模式】：寻找最新有数据的学期
-                if (isAuto) {
-                    overlay = this.showOverlay("正在寻找最新选课学期...");
-                    let foundValid = false;
-                    const optionsList = Array.from(gmSelect.options).filter(o => o.value);
-
-                    for (let i = 0; i < optionsList.length; i++) {
-                        const opt = optionsList[i];
-                        this.updateOverlayStatus(`正在检测: ${opt.text}...`);
-
-                        // 用 API 探测该学期是否有数据（只请求第1页1条）
-                        const testData = await this.fetchCoursePage(opt.value, 1, 1);
-                        if (testData && testData.data && testData.data.length > 0) {
-                            foundValid = true;
-                            targetSemesterId = opt.value;
-                            targetSemesterName = opt.text;
-                            Logger.log("2.5", `找到有数据的学期: ${opt.text}`);
-                            break;
-                        } else {
-                            Logger.log("2.5", `学期 ${opt.text} 为空，跳过`);
-                        }
-                    }
-
-                    if (!foundValid) {
-                        alert("未能找到任何包含排课数据的学期，自动同步终止。");
-                        overlay.remove();
-                        return;
-                    }
-
-                    const titleEl = document.querySelector('#gm-overlay-target-sem');
-                    if (titleEl) titleEl.innerText = `锁定抓取学期: ${targetSemesterName}`;
-                }
-                // 【手动模式】：只抓取用户在下拉框选定的学期
-                else {
-                    targetSemesterName = gmSelect.options[gmSelect.selectedIndex].text;
-                    targetSemesterId = gmSelect.value;
-                    if (!confirm(`即将抓取【${targetSemesterName}】的数据。\n过程可能需要几秒到十几秒，请勿关闭页面。`)) return;
-                    overlay = this.showOverlay(targetSemesterName);
-                }
+                overlay = this.showOverlay(targetSemesterName);
 
                 // --- 通过 API 分页获取全部数据（并行请求） ---
                 this.updateOverlayStatus("正在获取课程数据...");
@@ -6773,6 +6798,11 @@
         else if (href.includes('/student/for-std/program/info/') ||
             href.includes('/student/for-std/program-completion-preview/info/') ||
             href.includes('/student/for-std/majorPrograms/info/')) {
+            initProgramPageEnhancement(); // 功能8
+        }
+
+        // 4.1 研究生培养方案页面（研究生教育综合系统，含 /pyxx/ 等模块）
+        else if (location.host === 'yjsjy.nwpu.edu.cn') {
             initProgramPageEnhancement(); // 功能8
         }
 

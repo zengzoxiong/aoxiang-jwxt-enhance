@@ -8,6 +8,7 @@
 // @match        https://jwxt.nwpu.edu.cn/student/for-std/course-select/some-page*
 // @match        https://ecampus.nwpu.edu.cn/*
 // @match        https://teacher.nwpu.edu.cn/*
+// @match        https://yjsjy.nwpu.edu.cn/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
