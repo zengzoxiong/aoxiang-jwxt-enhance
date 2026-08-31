@@ -1914,7 +1914,7 @@
                     点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
                 </div>
                 <div class="gm-help-step">
-                    <b>学生画像增强：</b>进入”学生画像”页面，脚本会自动修正顶部卡片的平均分算法，并优化底部”计划外课程”的表格显示（增加教学班排名）。
+                    <b>学生画像增强：</b>进入”学生画像”页面，脚本会在顶部增加加权平均分的卡片，并优化底部”计划外课程”的表格显示。
                 </div>
             </div>
 
@@ -1925,8 +1925,7 @@
                 </div>
                 <div class="gm-help-step">
                     <b>第1步：同步选课数据</b><br>
-                    在”全校开课查询”页面，右侧会自动弹出<b>选课助手面板</b>。在下拉框中选择学期（列表每屏最多显示10项，可滚动查看全部学期），点击 <span class="gm-tag gm-tag-blue">存储选定学期课程信息</span> 按钮，脚本会抓取该学期的课程信息。<br>
-                    数据会存储到<b>三槽位存档系统</b>中，支持在线同步、本地上传、数据导出等功能。
+                    在”全校开课查询”页面，右侧会自动弹出<b>选课助手面板</b>。在下拉框中选择学期，点击 <span class="gm-tag gm-tag-blue">存储选定学期课程信息</span> 按钮，脚本会抓取该学期的课程信息。数据会存储到<b>存档系统</b>中，该系统支持在线同步、本地上传、数据导出等功能。
                 </div>
                 <div class="gm-help-step">
                     <b>第2步：管理存档</b><br>
@@ -3784,66 +3783,6 @@
         });
     }
 
-    /** 教师名可点击跳转教师主页【新版：选课界面，span + 全局事件委托】 */
-    function enhanceTeacherNamesModern(row) {
-        if (!document.getElementById('gm-teacher-link-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-teacher-link-style';
-            style.textContent = `
-            .course-teacher.gm-teacher-enhanced { color: #409EFF !important; font-weight: bold; cursor: pointer; transition: all 0.2s; }
-            .course-teacher.gm-teacher-enhanced:hover { color: #0056b3 !important; background-color: rgba(64,158,255,0.1); border-radius: 4px; }
-            .course-teacher .gm-teacher-name { color: #409EFF; font-weight: bold; cursor: pointer; padding: 1px 3px; border-radius: 3px; transition: all 0.2s; }
-            .course-teacher .gm-teacher-name:hover { color: #0056b3; text-decoration: underline; background-color: rgba(64,158,255,0.12); }
-        `;
-            document.head.appendChild(style);
-        }
-
-        const teacherEl = row.querySelector('.course-teacher');
-        if (!teacherEl || teacherEl.dataset.gmLinked === "true") return;
-
-        const rawText = teacherEl.innerText.trim();
-        if (!rawText || rawText === '待定' || rawText === '-') return;
-
-        teacherEl.dataset.gmLinked = "true";
-        teacherEl.classList.add('gm-teacher-enhanced');
-
-        // 拆分教师名：优先用服务端 data-text 属性，否则用 innerText
-        const sourceText = teacherEl.getAttribute('data-text') || teacherEl.innerText;
-        const names = sourceText
-            .replace(/<br\s*\/?>/gi, '\n')
-            .split(/[\s,，;；]+/)
-            .map(s => s.trim())
-            .filter(Boolean);
-        if (names.length === 0) return;
-
-        // 重建为每个教师名独立可点击元素（点击事件由全局委托处理）
-        teacherEl.innerHTML = '';
-        names.forEach((name, idx) => {
-            const span = document.createElement('span');
-            span.className = 'gm-teacher-name';
-            span.dataset.name = name;
-            span.textContent = name;
-            span.title = `搜索教师「${name}」的主页`;
-            teacherEl.appendChild(span);
-            if (idx < names.length - 1) teacherEl.appendChild(document.createElement('br'));
-        });
-    }
-
-    // 全局事件委托：新版 span 教师名的点击跳转（仅绑定一次）
-    if (!window._gm_teacher_link_bound) {
-        window._gm_teacher_link_bound = true;
-        document.addEventListener('click', function (e) {
-            const nameEl = e.target.closest('.gm-teacher-name');
-            if (!nameEl) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const name = nameEl.dataset.name || nameEl.textContent.trim();
-            if (!name || name === '待定' || name === '-') return;
-            GM_setValue('gm_cross_search_name', name);
-            window.open('https://teacher.nwpu.edu.cn/search/syss/.html', '_blank');
-        });
-    }
-
     /**
      * 在开课查询页面的表格中注入关注按钮
      */
@@ -4029,6 +3968,24 @@
                 setTimeout(forceUpdateUI, 500);
             }
 
+            // 解析已选课程列表响应（课程数组直接位于 data 下），重建映射表以支持"已选课程"标签页
+            function processSelectedLessonsResponse(responseText) {
+                cleanupAndReset();
+                try {
+                    const data = JSON.parse(responseText);
+                    if (data && Array.isArray(data.data)) {
+                        courseCodeToLessonIdMap = new Map(
+                            data.data
+                                .filter(lesson => lesson && lesson.code != null && lesson.id != null)
+                                .map(lesson => [lesson.code, lesson.id])
+                        );
+                    }
+                } catch (e) {
+                    console.error('[选课助手] 解析已选课程列表JSON时出错:', e);
+                }
+                setTimeout(forceUpdateUI, 500);
+            }
+
             // --- 1. 拦截 Fetch  ---
             unsafeWindow.fetch = function (...args) {
                 let [resource, config] = args;
@@ -4057,6 +4014,15 @@
                         return response;
                     });
                 }
+
+                // 已选课程列表：仅观察响应以建立课程代码→lessonId 映射，不改动请求
+                if (requestUrl && requestUrl.includes('/selected-lessons/')) {
+                    return originalFetch.apply(this, args).then(response => {
+                        const cloned = response.clone();
+                        cloned.text().then(text => processSelectedLessonsResponse(text));
+                        return response;
+                    });
+                }
                 return originalFetch.apply(this, args);
             };
 
@@ -4071,6 +4037,8 @@
                 this.addEventListener('load', function () {
                     if (this.responseURL && this.responseURL.includes('/query-lesson/')) {
                         processApiResponse(this.responseText);
+                    } else if (this.responseURL && this.responseURL.includes('/selected-lessons/')) {
+                        processSelectedLessonsResponse(this.responseText);
                     }
                 }, { once: true });
 
@@ -4161,13 +4129,12 @@
                         const { stdCount, limitCount, time } = latestRecord;
                         const isFull = stdCount >= limitCount;
                         const displayElement = document.createElement('span');
-                        displayElement.className = UI_ELEMENT_CLASS;
-                        displayElement.textContent = ` (上次记录: ${stdCount}/${limitCount})`;
-                        displayElement.title = `同步于 ${time}`;
-                        Object.assign(displayElement.style, {
-                            color: isFull ? '#F56C6C' : '#67C23A',
-                            fontWeight: 'bold', fontSize: '12px', marginLeft: '5px'
-                        });
+                        displayElement.className = `${UI_ELEMENT_CLASS} gm-hist-tag`;
+                        const bgColor = isFull ? '#fff0f0' : '#e6ffec';
+                        const textColor = isFull ? '#d32f2f' : '#1e7e34';
+                        displayElement.style.cssText = `display:block; width:fit-content; font-size:12px; color:${textColor}; background:${bgColor}; padding:1px 5px; border-radius:3px; margin:4px 0 0; border:1px solid ${textColor}40;`;
+                        displayElement.textContent = `记录:${stdCount}/${limitCount}`;
+                        displayElement.title = `上次同步时间: ${time}`;
                         targetContainer.appendChild(displayElement);
                     }
                 }
@@ -4239,8 +4206,6 @@
             // ==============================================================================
 
             function processRowWithCode(row, mode) {
-                enhanceTeacherNamesModern(row); // 选课界面使用新版模式
-
                 let courseCode = null;
                 // 1. 尝试获取课程代码
                 const accurateCodeElement = row.querySelector('div.lesson-code > a.link-url');
