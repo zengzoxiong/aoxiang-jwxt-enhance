@@ -101,6 +101,12 @@
         BACKGROUND_SYNC_KEY: 'jwxt_background_sync_data',
         LAST_SYNC_TIME_KEY: 'jwxt_last_bg_sync_time',
         HISTORY_STORAGE_KEY: 'course_enrollment_history_auto_sync',
+        // 学号在 localStorage 的兼容键（选课助手 / 画像页 / 诊断报告共用）
+        STUDENT_ID_LS_KEY: 'cs-course-select-student-id',
+        // 跨标签页人员检索：姓名的临时传递键
+        CROSS_SEARCH_NAME_KEY: 'gm_cross_search_name',
+        // 首次运行「脚本使用说明」弹窗是否已展示
+        INTRO_SHOWN_KEY: 'jwxt_enhanced_v162_intro_shown',
         SYNC_COOLDOWN_MS: 1 * 60 * 60 * 1000, // 1小时冷却
         // 中文等级制成绩到百分制分数的映射（用于等级制成绩折算百分制 GPA）
         GRADE_MAPPING_CONFIG: {
@@ -139,6 +145,13 @@
     // HTML 转义工具（弹窗文案 / 存档区存档名 / 重命名输入等共用）
     const esc = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+    // 统一样式元素获取：按 id 复用已存在的 <style>，否则新建一个（textContent 设置与挂载由调用方负责）
+    function getOrCreateStyleEl(id) {
+        let el = document.getElementById(id);
+        if (!el) { el = document.createElement('style'); el.id = id; }
+        return el;
+    }
+
     // 悬浮球 UI 变量
     let floatBall = null;
     let floatMenu = null;
@@ -176,8 +189,7 @@
 
         const ensureStyle = () => {
             if (document.getElementById('gm-dialog-style')) return;
-            const style = document.createElement('style');
-            style.id = 'gm-dialog-style';
+            const style = getOrCreateStyleEl('gm-dialog-style');
             style.textContent = `
             .gm-dialog-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); z-index: 200000; display: flex; align-items: center; justify-content: center; animation: gmDialogFadeIn 0.2s ease-out; transition: opacity 0.18s; }
             @keyframes gmDialogFadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -195,8 +207,6 @@
             document.head.appendChild(style);
         };
 
-        const escapeHtml = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
         function open(opts, isConfirm) {
             opts = typeof opts === 'string' ? { message: opts } : (opts || {});
             const type = ICONS[opts.type] ? opts.type : 'info';
@@ -205,8 +215,8 @@
             return new Promise(resolve => {
                 const overlay = document.createElement('div');
                 overlay.className = 'gm-dialog-overlay';
-                const msgHtml = escapeHtml(opts.message || '').replace(/\n/g, '<br>');
-                const titleHtml = opts.title ? `<div class="gm-dialog-title">${escapeHtml(opts.title)}</div>` : '';
+                const msgHtml = esc(opts.message || '').replace(/\n/g, '<br>');
+                const titleHtml = opts.title ? `<div class="gm-dialog-title">${esc(opts.title)}</div>` : '';
                 overlay.innerHTML = `
                 <div class="gm-dialog">
                     <div class="gm-dialog-body">
@@ -214,8 +224,8 @@
                         <div class="gm-dialog-text">${titleHtml}${msgHtml}</div>
                     </div>
                     <div class="gm-dialog-footer">
-                        ${isConfirm ? `<button class="gm-dialog-btn gm-dialog-cancel">${escapeHtml(opts.cancelText || '取消')}</button>` : ''}
-                        <button class="gm-dialog-btn gm-dialog-btn-primary" style="background:${THEME[type]};">${escapeHtml(opts.confirmText || '确定')}</button>
+                        ${isConfirm ? `<button class="gm-dialog-btn gm-dialog-cancel">${esc(opts.cancelText || '取消')}</button>` : ''}
+                        <button class="gm-dialog-btn gm-dialog-btn-primary" style="background:${THEME[type]};">${esc(opts.confirmText || '确定')}</button>
                     </div>
                 </div>`;
                 document.body.appendChild(overlay);
@@ -274,7 +284,7 @@
         initModal: function () {
             if (document.getElementById('gm-friendly-links-modal')) return;
 
-            const style = document.createElement('style');
+            const style = getOrCreateStyleEl('gm-friendly-links-style');
             style.textContent = `
             .gm-fl-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); z-index: 100005; display: flex; justify-content: center; align-items: center; animation: gmLinkFadeIn 0.2s ease-out; }
             @keyframes gmLinkFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
@@ -467,8 +477,7 @@
 
                 // 等待按钮旋转动画
                 if (!document.getElementById('gm-spin-style')) {
-                    const style = document.createElement('style');
-                    style.id = 'gm-spin-style';
+                    const style = getOrCreateStyleEl('gm-spin-style');
                     style.textContent = '@keyframes gmSpin { 100% { transform: rotate(360deg); } } .gm-spin { animation: gmSpin 1s linear infinite; }';
                     document.head.appendChild(style);
                 }
@@ -609,7 +618,7 @@
                                 const sid = dataIdMatch[1];
                                 Logger.log('Core', `解析成功，StudentID (dataId): ${sid}`);
                                 cachedStudentId = sid;
-                                localStorage.setItem('cs-course-select-student-id', sid); // 兼容选课助手
+                                localStorage.setItem(CONSTANTS.STUDENT_ID_LS_KEY, sid); // 兼容选课助手
                                 resolve(sid);
                             } else {
                                 Logger.error('Core', "HTML 中未找到 dataId 变量");
@@ -669,7 +678,7 @@
                     Logger.warn("Core", "检测到请求无效，准备重试...");
                     // 显式传入的 studentId（如预取）无效时不清理主缓存
                     if (!options.studentId) {
-                        localStorage.removeItem('cs-course-select-student-id');
+                        localStorage.removeItem(CONSTANTS.STUDENT_ID_LS_KEY);
                         cachedStudentId = null; // 清除内存缓存，确保重试时重新获取
                     }
                     return await fetchAllDataAndCache(retryCount + 1, options);
@@ -767,12 +776,12 @@
             console.groupCollapsed('%c[NWPU-Enhanced]脚本环境诊断报告 (点击展开)', 'background:#007bff; color:#fff; padding:4px 8px; border-radius:4px;');
 
             // --- 1. 基础环境与配置 ---
-            const studentId = localStorage.getItem('cs-course-select-student-id');
+            const studentId = localStorage.getItem(CONSTANTS.STUDENT_ID_LS_KEY);
             const configData = {
                 '脚本版本': GM_info.script.version,
-                '当前学号 (LocalStorage)': studentId || '❌ 未获取 (可能导致功能失效)',
-                '功能开关: 画像增强': ConfigManager.enablePortraitEnhancement ? '✅ 开启' : 'OFF',
-                '功能开关: 课程关注': ConfigManager.enableCourseWatch ? '✅ 开启' : 'OFF',
+                '当前学号 (LocalStorage)': studentId || '未获取 (可能导致功能失效)',
+                '功能开关: 画像增强': ConfigManager.enablePortraitEnhancement ? '开启' : 'OFF',
+                '功能开关: 课程关注': ConfigManager.enableCourseWatch ? '开启' : 'OFF',
                 '浏览器 UserAgent': navigator.userAgent.substring(0, 50) + '...'
             };
             console.log('%c 1. 环境与配置', 'color: #007bff; font-weight: bold;');
@@ -789,7 +798,7 @@
                         semesterCounts[g.学期] = (semesterCounts[g.学期] || 0) + 1;
                     });
                 }
-                console.log(`%c ✅ 数据有效 | 占用空间: ${calcSize(cacheRawSize)}`, 'color: green');
+                console.log(`%c 数据有效 | 占用空间: ${calcSize(cacheRawSize)}`, 'color: green');
                 console.table({
                     '总课程数': cachedData.allGrades ? cachedData.allGrades.length : 0,
                     '包含学期数': cachedData.semesterNames ? cachedData.semesterNames.length : 0,
@@ -801,7 +810,7 @@
                     console.table(semesterCounts);
                 }
             } else {
-                console.log('%c ⚠️ 未检测到成绩缓存 (正常现象，稍后会自动抓取)', 'color: orange');
+                console.log('%c 未检测到成绩缓存 (正常现象，稍后会自动抓取)', 'color: orange');
             }
 
             // --- 3. 关注课程数据 (LocalStorage) ---
@@ -816,7 +825,7 @@
                 };
                 console.table(followStats);
             } else {
-                console.log('⚪ 关注列表为空');
+                console.log('关注列表为空');
             }
 
             // --- 4. 选课助手/后台同步数据 ---
@@ -830,7 +839,7 @@
             console.table({
                 '全校课表缓存 (条数)': bgData ? bgData.length : 0,
                 '全校课表占用': calcSize(bgRaw),
-                '上次全校同步时间': lastSyncTime ? new Date(lastSyncTime).toLocaleString() : '⚠️ 从未同步',
+                '上次全校同步时间': lastSyncTime ? new Date(lastSyncTime).toLocaleString() : '从未同步',
                 '历史余量记录 (课程数)': historyData ? Object.keys(historyData).length : 0,
                 '历史记录占用': calcSize(historyRaw)
             });
@@ -856,7 +865,7 @@
         initScheduleWidget();
 
         // 首次运行检测
-        const FIRST_RUN_KEY = 'jwxt_enhanced_v162_intro_shown';
+        const FIRST_RUN_KEY = CONSTANTS.INTRO_SHOWN_KEY;
         if (!GM_getValue(FIRST_RUN_KEY, false)) {
             setTimeout(() => handleHelpClick(), 1500);
             GM_setValue(FIRST_RUN_KEY, true);
@@ -894,8 +903,7 @@
 
     function createFloatingMenu(isEcampus = false) {
         if (!document.getElementById('gm-float-menu-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-float-menu-style';
+            const style = getOrCreateStyleEl('gm-float-menu-style');
             style.textContent = `
             /* 悬浮球样式 */
             .gm-float-ball {
@@ -1338,7 +1346,7 @@
             // --- 7. 保存数据 ---
             updateStatus('正在保存数据...');
             let history = {};
-            try { history = JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); }
+            try { history = JSON.parse(GM_getValue(CONSTANTS.HISTORY_STORAGE_KEY, '{}')); }
             catch (e) { history = {}; }
 
             allCourseData.forEach(c => {
@@ -1352,7 +1360,7 @@
                 }
             });
 
-            GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(history));
+            GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, JSON.stringify(history));
 
             overlay.remove();
             // 游戏式存档：在线同步的新数据静默写入「使用中」的存档（保留自定义命名）
@@ -1440,7 +1448,7 @@
 
         // 读取当前活跃选课数据（选课助手正在使用的那份）
         readActiveHistory() {
-            try { return JSON.parse(GM_getValue('course_enrollment_history_auto_sync', '{}')); } catch (e) { return {}; }
+            try { return JSON.parse(GM_getValue(CONSTANTS.HISTORY_STORAGE_KEY, '{}')); } catch (e) { return {}; }
         },
 
         // 统计存档数据覆盖的学期数（以每门课最新记录的 term 标记为准；旧版数据无标记则不计入）
@@ -1499,7 +1507,7 @@
             const state = this.load();
             const slot = state.slots[index];
             if (!slot) return;
-            GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(slot.data));
+            GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, JSON.stringify(slot.data));
             state.sourceSlot = index;
             this.save(state);
         },
@@ -1513,10 +1521,10 @@
                 const next = this.findNearestOccupied(state.slots, index);
                 state.sourceSlot = next;
                 if (next >= 0) {
-                    GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(state.slots[next].data));
+                    GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, JSON.stringify(state.slots[next].data));
                     switchedTo = state.slots[next].name;
                 } else {
-                    GM_setValue('course_enrollment_history_auto_sync', '{}');
+                    GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, '{}');
                 }
             }
             this.save(state);
@@ -1567,8 +1575,7 @@
         // 注入存档区专用样式（图标按钮 / 使用中徽章）
         ensureStyles() {
             if (document.getElementById('gm-archive-style')) return;
-            const style = document.createElement('style');
-            style.id = 'gm-archive-style';
+            const style = getOrCreateStyleEl('gm-archive-style');
             style.textContent = `
             .gm-arc-btn { width:26px; height:26px; border-radius:6px; border:none; background:transparent; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; transition:all .15s; flex-shrink:0; }
             .gm-arc-btn:hover { background:rgba(64,158,255,.12); }
@@ -1716,8 +1723,7 @@
         const existing = document.getElementById('gm-archive-toast');
         if (existing) existing.remove();
         if (!document.getElementById('gm-archive-toast-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-archive-toast-style';
+            const style = getOrCreateStyleEl('gm-archive-toast-style');
             style.textContent = `
             .gm-arc-toast { position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #fff; color: #303133; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; z-index: 300000; box-shadow: 0 6px 18px rgba(0,0,0,0.15); border-left: 3px solid #67C23A; opacity: 0; transition: all .25s ease-out; pointer-events: none; max-width: 80vw; }
             .gm-arc-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -1794,7 +1800,7 @@
                 const parsed = JSON.parse(reader.result);
                 const history = (parsed && parsed.data && typeof parsed.data === 'object') ? parsed.data : parsed;
                 if (!history || typeof history !== 'object') throw new Error('格式不正确');
-                GM_setValue('course_enrollment_history_auto_sync', JSON.stringify(history));
+                GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, JSON.stringify(history));
                 // 本地上传：由用户确认覆盖哪个存档槽位（选定槽位将成为当前使用的存档）
                 ArchiveManager.promptArchive('导入成功！请选择要覆盖的存档槽位。', '导入数据').then(() => showSyncDataModal());
             } catch (e) {
@@ -1814,8 +1820,7 @@
         // 1. 注入弹窗专用样式
         const styleId = 'gm-help-popup-style';
         if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
-            style.id = styleId;
+            const style = getOrCreateStyleEl(styleId);
             style.textContent = `
             /* 遮罩层 */
             .gm-help-overlay {
@@ -2243,8 +2248,7 @@
         // 模块 3: CSS 样式注入
         const styleId = 'gm-followed-modal-style';
         if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
-            style.id = styleId;
+            const style = getOrCreateStyleEl(styleId);
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 10005; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
             .gm-modal-content { background-color: #fff; border-radius: 12px; width: 95%; max-width: 1200px; height: 90vh; max-height: 950px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; animation: gmFadeIn 0.2s ease-out; }
@@ -2445,8 +2449,7 @@
 
     function initExportUI() {
         if (!document.getElementById('export-ui-styles')) {
-            const style = document.createElement("style");
-            style.id = 'export-ui-styles';
+            const style = getOrCreateStyleEl('export-ui-styles');
             style.textContent = `
     .semester-bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10001; display: none; transition: all 0.3s; }
     .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
@@ -2610,8 +2613,7 @@
 
         const styleId = 'gpa-report-modal-styles';
         if (!document.getElementById(styleId)) {
-            const style = document.createElement("style");
-            style.id = styleId;
+            const style = getOrCreateStyleEl(styleId);
             style.textContent = `
             .gpa-report-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out; }
             .gpa-report-modal { background-color: #f5f7fa; border-radius: 12px; width: 880px; max-width: 95%; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
@@ -2856,7 +2858,7 @@
 
     function injectTooltipStylesForPortrait() {
         const styleId = 'gm-tooltip-styles-portrait'; if (document.getElementById(styleId)) return;
-        const style = document.createElement('style'); style.id = styleId;
+        const style = getOrCreateStyleEl(styleId);
         style.textContent = `
         .gm-tooltip-trigger { position: relative; cursor: help; font-family: "iconfont" !important; font-size: 14px; font-style: normal; }
         .gm-tooltip-trigger:hover::after { content: attr(data-gm-tooltip); position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); background-color: #303133; color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 12px; line-height: 1.4; white-space: pre-line; z-index: 10001; display: inline-block; width: max-content; max-width: 280px; box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1); pointer-events: none; }
@@ -3178,7 +3180,7 @@
                             if (sid) {
                                 Logger.log('Core', `画像页获取正确 StudentID: ${sid} (cultivateTypeAssoc=${cultivateTypeAssoc})`);
                                 cachedStudentId = sid;
-                                localStorage.setItem('cs-course-select-student-id', sid);
+                                localStorage.setItem(CONSTANTS.STUDENT_ID_LS_KEY, sid);
                                 recordPortraitStudentId(sid);
                                 resolve(sid);
                             } else {
@@ -3311,7 +3313,7 @@
     const LessonSearchEnhancer = {
         // 配置常量
         CONFIG: {
-            HISTORY_KEY: 'course_enrollment_history_auto_sync',
+            HISTORY_KEY: CONSTANTS.HISTORY_STORAGE_KEY,
             // 从 URL 中提取学生ID，如 /lesson-search/index/277933
             STUDENT_ID: window.location.pathname.match(/lesson-search\/index\/(\d+)/)?.[1] || '',
             API_BASE: '/student/for-std/lesson-search/semester',
@@ -3746,8 +3748,7 @@
     /** 教师名可点击跳转教师主页【旧版：开课查询，直接绑定 onclick】 */
     function enhanceTeacherNames(row) {
         if (!document.getElementById('gm-teacher-link-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-teacher-link-style';
+            const style = getOrCreateStyleEl('gm-teacher-link-style');
             style.textContent = `
             .gm-teacher-link { color: #409EFF !important; text-decoration: none; font-weight: bold; transition: all 0.2s; cursor: pointer; }
             .gm-teacher-link:hover { color: #0056b3 !important; text-decoration: underline; background-color: rgba(64,158,255,0.1); border-radius: 4px; padding: 2px 4px; }
@@ -3775,7 +3776,7 @@
             a.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                GM_setValue('gm_cross_search_name', name);
+                GM_setValue(CONSTANTS.CROSS_SEARCH_NAME_KEY, name);
                 window.open('https://teacher.nwpu.edu.cn/search/syss/.html', '_blank');
             };
             teacherEl.appendChild(a);
@@ -3924,7 +3925,7 @@
             const API_URL_TEMPLATE = "https://jwxt.nwpu.edu.cn/student/for-std-lessons/info/";
             const TARGET_CELL_SELECTOR = "td div.el-progress";
             const UI_ELEMENT_CLASS = 'course-helper-ui-element';
-            const HISTORY_STORAGE_KEY = 'course_enrollment_history_auto_sync';
+            const HISTORY_STORAGE_KEY = CONSTANTS.HISTORY_STORAGE_KEY;
 
             let courseCodeToLessonIdMap = null;
 
@@ -4672,8 +4673,7 @@
 
         // 2. 注入美化后的 CSS
         if (!document.getElementById('gm-program-tooltip-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-program-tooltip-style';
+            const style = getOrCreateStyleEl('gm-program-tooltip-style');
             style.textContent = `
             /* 课程代码高亮样式 */
             .gm-course-code-highlight {
@@ -5095,8 +5095,7 @@
 
             // --- 2. 注入样式 ---
             if (!document.getElementById('gm-schedule-table-style')) {
-                const style = document.createElement('style');
-                style.id = 'gm-schedule-table-style';
+                const style = getOrCreateStyleEl('gm-schedule-table-style');
                 style.textContent = `
                 .gm-schedule-box {
                     position: fixed; left: 20px; bottom: 20px; z-index: 9999;
@@ -5261,8 +5260,7 @@
 
         // --- 1. 注入 CSS ---
         if (!document.getElementById('gm-eval-style')) {
-            const style = document.createElement('style');
-            style.id = 'gm-eval-style';
+            const style = getOrCreateStyleEl('gm-eval-style');
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
             .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
@@ -6056,8 +6054,7 @@
 
         injectStyles() {
             if (document.getElementById('gm-person-search-style')) return;
-            const style = document.createElement('style');
-            style.id = 'gm-person-search-style';
+            const style = getOrCreateStyleEl('gm-person-search-style');
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out;}
             .gm-modal-content { background-color: #fff; border-radius: 12px; width: 880px; max-width: 95%; height: 75vh; max-height: 850px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif; }
@@ -6557,8 +6554,7 @@
         // 注入UI样式
         injectStyles() {
             if (document.getElementById('gm-textbook-style')) return;
-            const style = document.createElement('style');
-            style.id = 'gm-textbook-style';
+            const style = getOrCreateStyleEl('gm-textbook-style');
             style.textContent = `
             .gm-textbook-wrapper {
                 margin: 20px; padding: 20px; background: #fff;
@@ -6778,7 +6774,7 @@
 
         // 6. 教师主页跨标签页自动触发搜索
         else if (href.includes('teacher.nwpu.edu.cn/search')) {
-            const searchName = GM_getValue('gm_cross_search_name');
+            const searchName = GM_getValue(CONSTANTS.CROSS_SEARCH_NAME_KEY);
             if (searchName) {
                 const autoSearch = () => {
                     const input = document.getElementById('sea');
@@ -6793,7 +6789,7 @@
                         btn.click();
 
                         // 只有真正成功点击搜索后，才清空缓存
-                        GM_setValue('gm_cross_search_name', '');
+                        GM_setValue(CONSTANTS.CROSS_SEARCH_NAME_KEY, '');
                     }
                 };
 
@@ -6808,7 +6804,7 @@
                     // 延长超时时间至 15 秒(150次)，适配首次无缓存加载较慢的情况
                     else if (retryCount > 150) {
                         clearInterval(timer);
-                        GM_setValue('gm_cross_search_name', ''); // 超时兜底清空
+                        GM_setValue(CONSTANTS.CROSS_SEARCH_NAME_KEY, ''); // 超时兜底清空
                     }
                     retryCount++;
                 }, 100);
