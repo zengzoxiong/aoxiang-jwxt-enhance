@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.3
-// @description  本脚本适用于西北工业大学翱翔门户与翱翔教务页面。
+// @version      1.8.4
+// @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
 // @match        https://jwxt.nwpu.edu.cn/student/for-std/course-select/some-page*
@@ -12,9 +12,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
 // @connect      electronic-signature.nwpu.edu.cn
+// @connect      jwxt.nwpu.edu.cn
 // @connect      gitee.com
 // @connect      raw.giteeusercontent.com
 // @connect      raw.githubusercontent.com
@@ -41,16 +41,15 @@
     //   DOMContentLoaded（见文件末尾）：
     //     runMainFeatures() 统一路由分发，所有页面入口仅此一处：
     //       ① window.name === Worker 名      → 后台同步 Worker，直接返回
-    //       ② gm-id-fetcher-patch iframe     → 直接返回（守卫）
-    //       ③ ecampus.nwpu.edu.cn            → 门户同步 + 门户主页功能，返回
-    //       ④ jwxt 顶层窗口（非画像页）       → 延迟 6s 预取画像数据（加速画像页）
-    //       ⑤ 评教页    → initEvaluationHelper（load/hashchange/兜底三重触发，内部有幂等守卫）
-    //       ⑥ 开课查询  → LessonSearchEnhancer.init()（2.5 同步面板）+ initLessonSearchPage()（2.6 课程关注）
-    //       ⑦ 学生画像  → enhancePortraitPage()
-    //       ⑧ 培养方案  → initProgramPageEnhancement()
-    //       ⑨ 我的课表  → TextbookInfoModule.initUI()（UI 阶段；数据阶段由 installHook 缓存兜底）
-    //       ⑩ 教师搜索  → 跨标签页自动搜索注入（teacher.nwpu.edu.cn）
-    //       ⑪ 顶层主页  → initializeHomePageFeatures() + 延迟启动后台同步控制器
+    //       ② ecampus.nwpu.edu.cn            → 门户同步 + 门户主页功能，返回
+    //       ③ jwxt 顶层窗口（非画像页）       → 延迟 6s 预取画像数据（加速画像页）
+    //       ④ 评教页    → initEvaluationHelper（load/hashchange/兜底三重触发，内部有幂等守卫）
+    //       ⑤ 开课查询  → LessonSearchEnhancer.init()（2.5 同步面板）+ initLessonSearchPage()（2.6 课程关注）
+    //       ⑥ 学生画像  → enhancePortraitPage()
+    //       ⑦ 培养方案  → initProgramPageEnhancement()
+    //       ⑧ 我的课表  → TextbookInfoModule.initUI()（UI 阶段；数据阶段由 installHook 缓存兜底）
+    //       ⑨ 教师搜索  → 跨标签页自动搜索注入（teacher.nwpu.edu.cn）
+    //       ⑩ 顶层主页 / 研究生系统 → 延迟启动后台同步控制器（研究生系统另含培养方案增强）
     //   例外：/course-selection 选课助手（2.7）为历史遗留的独立 IIFE，
     //     自带 main() 与 readyState 等待，待后续版本迁移至统一路由。
     // ============================================================
@@ -107,6 +106,11 @@
         CROSS_SEARCH_NAME_KEY: 'gm_cross_search_name',
         // 首次运行「脚本使用说明」弹窗是否已展示
         INTRO_SHOWN_KEY: 'jwxt_enhanced_v162_intro_shown',
+        // 统一认证身份（本科生 / 研究生），用于选课时间提醒
+        USER_IDENTITY_KEY: 'gm_user_identity_type',
+        USER_IDENTITY_NAME_KEY: 'gm_user_identity_name',
+        // 选课时间表远程配置缓存
+        SCHEDULE_CACHE_KEY: 'gm_schedule_config_cache_v1',
         SYNC_COOLDOWN_MS: 1 * 60 * 60 * 1000, // 1小时冷却
         // 中文等级制成绩到百分制分数的映射（用于等级制成绩折算百分制 GPA）
         GRADE_MAPPING_CONFIG: {
@@ -152,6 +156,1450 @@
         return el;
     }
 
+    // ============================================================
+    // 0.1 统一视觉系统（设计令牌 + 组件覆盖）
+    // 说明：只收敛颜色、字号、圆角、阴影与控件状态，不改布局和交互逻辑。
+    // 使用 html body 前缀提高权重，覆盖各功能模块后注入的同名样式。
+    // ============================================================
+    function injectUnifiedDesignSystem() {
+        if (document.getElementById('gm-unified-design-system')) return;
+        const style = document.createElement('style');
+        style.id = 'gm-unified-design-system';
+        style.textContent = `
+        :root {
+            --gm-primary: #409eff;
+            --gm-primary-hover: #66b1ff;
+            --gm-primary-active: #337ecc;
+            --gm-primary-text: #1a6fc4;
+            --gm-primary-light: #ecf5ff;
+            --gm-primary-border: #b3d8ff;
+            --gm-success: #67c23a;
+            --gm-success-bg: #f0f9eb;
+            --gm-success-border: #e1f3d8;
+            --gm-success-text: #2e7d32;
+            --gm-warning: #e6a23c;
+            --gm-warning-bg: #fdf6ec;
+            --gm-warning-border: #faecd8;
+            --gm-warning-text: #a85b00;
+            --gm-danger: #f56c6c;
+            --gm-danger-bg: #fef0f0;
+            --gm-danger-border: #fab6b6;
+            --gm-danger-text: #c53030;
+            --gm-info: #909399;
+            --gm-info-bg: #f4f4f5;
+            --gm-info-border: #e9e9eb;
+            --gm-text-1: #0f172a;
+            --gm-text-2: #334155;
+            --gm-text-3: #5b6b80;
+            --gm-text-4: #94a3b8;
+            --gm-border: #e2e8f0;
+            --gm-border-light: #f1f5f9;
+            --gm-fill: #f8fafc;
+            --gm-fill-strong: #f1f5f9;
+            --gm-radius-sm: 6px;
+            --gm-radius: 8px;
+            --gm-radius-lg: 12px;
+            --gm-radius-xl: 16px;
+            --gm-radius-pill: 999px;
+            --gm-shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 2px 8px rgba(15, 23, 42, .04);
+            --gm-shadow: 0 8px 24px rgba(15, 23, 42, .10);
+            --gm-shadow-lg: 0 16px 40px rgba(15, 23, 42, .16);
+            --gm-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, system-ui, sans-serif;
+            --gm-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        }
+
+        /* ---------- 遮罩与弹窗骨架 ---------- */
+        html body .gm-dialog-overlay,
+        html body .gm-modal-overlay,
+        html body .gpa-report-overlay,
+        html body .gm-help-overlay,
+        html body .gm-fl-modal-overlay,
+        html body .gm-sync-overlay,
+        html body .semester-bg-overlay {
+            background: rgba(15, 23, 42, .48) !important;
+            backdrop-filter: blur(4px) !important;
+        }
+        html body .gm-dialog,
+        html body .gm-modal-content,
+        html body .gpa-report-modal,
+        html body .gm-help-modal,
+        html body .gm-fl-modal,
+        html body .gm-sync-modal-card,
+        html body .semester-checkbox-container,
+        html body #gm-lesson-helper-panel,
+        html body .gm-textbook-wrapper {
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow-lg) !important;
+            background: #fff !important;
+            font-family: var(--gm-font) !important;
+        }
+        html body .gm-modal-header,
+        html body .gpa-modal-header,
+        html body .gm-help-header,
+        html body .gm-fl-header {
+            padding: 16px 24px !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+            height: auto !important;
+            min-height: 58px !important;
+        }
+        html body .gm-modal-title,
+        html body .gpa-modal-title,
+        html body .gm-help-title,
+        html body .gm-fl-title,
+        html body .gm-sync-modal-title {
+            font-family: var(--gm-font) !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            gap: 8px !important;
+            letter-spacing: 0 !important;
+        }
+        html body .gm-modal-close,
+        html body .gpa-close-btn,
+        html body .gm-close-btn,
+        html body .gm-fl-close,
+        html body .gm-help-close,
+        html body #gm-sync-close,
+        html body #gm-panel-close {
+            width: 30px !important;
+            height: 30px !important;
+            min-width: 30px !important;
+            border: 0 !important;
+            border-radius: 50% !important;
+            background: transparent !important;
+            color: var(--gm-text-3) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 18px !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            cursor: pointer !important;
+            transition: background .18s ease, color .18s ease, transform .18s ease !important;
+        }
+        html body .gm-modal-close:hover,
+        html body .gpa-close-btn:hover,
+        html body .gm-close-btn:hover,
+        html body .gm-fl-close:hover,
+        html body .gm-help-close:hover,
+        html body #gm-sync-close:hover,
+        html body #gm-panel-close:hover {
+            background: var(--gm-danger-bg) !important;
+            color: var(--gm-danger-text) !important;
+            transform: rotate(90deg) !important;
+        }
+
+        /* ---------- 按钮与输入 ---------- */
+        html body .gm-dialog-btn,
+        html body .gm-btn,
+        html body .calculate-btn,
+        html body .confirm-export-button,
+        html body .select-all-button,
+        html body .cancel-button,
+        html body .gm-ps-btn,
+        html body .semester-checkbox-container button {
+            min-height: 34px !important;
+            height: auto !important;
+            padding: 0 14px !important;
+            border-radius: var(--gm-radius) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            line-height: 1 !important;
+            box-sizing: border-box !important;
+            transition: background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease !important;
+        }
+        html body .gm-btn-primary,
+        html body .calculate-btn,
+        html body .confirm-export-button,
+        html body .gm-ps-btn {
+            background: var(--gm-primary) !important;
+            border: 1px solid var(--gm-primary) !important;
+            color: #fff !important;
+            box-shadow: 0 4px 10px rgba(64, 158, 255, .22) !important;
+        }
+        html body .gm-btn-primary:hover,
+        html body .calculate-btn:hover,
+        html body .confirm-export-button:hover,
+        html body .gm-ps-btn:hover {
+            background: var(--gm-primary-hover) !important;
+            border-color: var(--gm-primary-hover) !important;
+        }
+        html body .gm-btn-warning {
+            background: var(--gm-warning) !important;
+            border-color: var(--gm-warning) !important;
+            color: #fff !important;
+        }
+        html body .select-all-button {
+            background: #fff !important;
+            border: 1px solid var(--gm-border) !important;
+            color: var(--gm-text-2) !important;
+        }
+        html body .select-all-button:hover {
+            background: var(--gm-primary-light) !important;
+            border-color: var(--gm-primary-border) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .cancel-button {
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .cancel-button:hover {
+            background: var(--gm-fill-strong) !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-dialog-btn {
+            border: 1px solid var(--gm-border) !important;
+            color: var(--gm-text-2) !important;
+        }
+        html body .gm-dialog-btn:not(.gm-dialog-btn-primary):hover {
+            background: var(--gm-fill) !important;
+            border-color: var(--gm-border) !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-dialog-btn-primary {
+            border: 0 !important;
+            color: #fff !important;
+        }
+        html body .gm-dialog-btn-primary:hover {
+            opacity: .9 !important;
+            color: #fff !important;
+        }
+        html body .gm-ps-input,
+        html body .input-group input,
+        html body .gm-filter-select,
+        html body .gm-score-input,
+        html body #gm-semester-dd-trigger {
+            border: 1px solid var(--gm-border) !important;
+            border-radius: var(--gm-radius) !important;
+            background: #fff !important;
+            color: var(--gm-text-1) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            box-sizing: border-box !important;
+            outline: none !important;
+            transition: border-color .18s ease, box-shadow .18s ease !important;
+        }
+        html body .gm-ps-input,
+        html body .input-group input {
+            height: 36px !important;
+            padding: 0 11px !important;
+        }
+        html body .gm-filter-select {
+            height: 32px !important;
+            padding: 0 10px !important;
+            font-size: 12px !important;
+        }
+        html body .gm-score-input {
+            width: 68px !important;
+            height: 30px !important;
+            padding: 0 6px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            font-family: var(--gm-mono) !important;
+            font-size: 12px !important;
+            text-align: center !important;
+        }
+        html body #gm-semester-dd-trigger {
+            height: 36px !important;
+            padding: 0 30px 0 10px !important;
+            font-size: 12.5px !important;
+        }
+        html body .gm-ps-input:focus,
+        html body .input-group input:focus,
+        html body .gm-filter-select:focus,
+        html body .gm-score-input:focus,
+        html body #gm-semester-dd-trigger:focus {
+            border-color: var(--gm-primary) !important;
+            box-shadow: 0 0 0 3px rgba(64, 158, 255, .18) !important;
+        }
+        html body .gm-checkbox,
+        html body .gm-modal-content input[type="checkbox"],
+        html body .semester-checkbox-container input[type="checkbox"] {
+            accent-color: var(--gm-primary) !important;
+        }
+
+        /* ---------- 标签 / 状态 / 代码 ---------- */
+        html body .gm-tag,
+        html body .gm-arc-badge,
+        html body .gm-course-status-tag {
+            display: inline-flex !important;
+            align-items: center !important;
+            min-height: 22px !important;
+            height: auto !important;
+            padding: 0 8px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+            line-height: 1 !important;
+            border: 1px solid transparent !important;
+            box-sizing: border-box !important;
+            white-space: nowrap !important;
+        }
+        html body .gm-tag-blue {
+            background: var(--gm-primary-light) !important;
+            border-color: var(--gm-primary-border) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-tag-red {
+            background: var(--gm-danger-bg) !important;
+            border-color: var(--gm-danger-border) !important;
+            color: var(--gm-danger-text) !important;
+        }
+        html body .gm-tag-gray {
+            background: var(--gm-info-bg) !important;
+            border-color: var(--gm-info-border) !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-tag-done {
+            background: var(--gm-success-bg) !important;
+            border-color: var(--gm-success-border) !important;
+            color: var(--gm-success-text) !important;
+        }
+        html body .gm-tag-todo {
+            background: var(--gm-warning-bg) !important;
+            border-color: var(--gm-warning-border) !important;
+            color: var(--gm-warning-text) !important;
+        }
+        html body .gm-arc-badge {
+            min-height: 18px !important;
+            padding: 0 5px !important;
+            font-size: 10px !important;
+            background: var(--gm-primary-light) !important;
+            border-color: var(--gm-primary-border) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-code-badge {
+            display: inline-flex !important;
+            align-items: center !important;
+            padding: 2px 6px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            background: var(--gm-fill-strong) !important;
+            color: var(--gm-text-3) !important;
+            font-family: var(--gm-mono) !important;
+            font-size: 10.5px !important;
+        }
+        html body .gm-course-code-highlight {
+            border: 1.5px dashed var(--gm-primary) !important;
+            color: var(--gm-primary-text) !important;
+            background: var(--gm-primary-light) !important;
+            border-radius: var(--gm-radius-sm) !important;
+            padding: 2px 6px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-course-code-highlight:hover {
+            background: var(--gm-primary-border) !important;
+            color: var(--gm-primary-active) !important;
+            border-color: var(--gm-primary-active) !important;
+        }
+        html body .gm-hist-tag {
+            display: inline-flex !important;
+            align-items: center !important;
+            padding: 2px 6px !important;
+            border: 1px solid transparent !important;
+            border-radius: 4px !important;
+            font-family: var(--gm-font) !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+            white-space: nowrap !important;
+        }
+        html body .gm-hist-tag--ok {
+            background: var(--gm-success-bg) !important;
+            border-color: var(--gm-success-border) !important;
+            color: var(--gm-success-text) !important;
+        }
+        html body .gm-hist-tag--full {
+            background: var(--gm-danger-bg) !important;
+            border-color: var(--gm-danger-border) !important;
+            color: var(--gm-danger-text) !important;
+        }
+        html body .gm-release-tag {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            padding: 2px 7px !important;
+            border: 1px solid var(--gm-success-border) !important;
+            border-radius: 4px !important;
+            background: var(--gm-success-bg) !important;
+            color: var(--gm-success-text) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            line-height: 1.4 !important;
+            white-space: nowrap !important;
+        }
+        html body .gm-release-tag::before {
+            content: "" !important;
+            width: 5px !important;
+            height: 5px !important;
+            border-radius: 50% !important;
+            background: var(--gm-success) !important;
+            flex: none !important;
+        }
+
+        /* ---------- 表格 / 标签页 ---------- */
+        html body .gm-course-table,
+        html body .gm-timetable,
+        html body .gm-sch-table,
+        html body .gm-textbook-table {
+            border-color: var(--gm-border) !important;
+            font-family: var(--gm-font) !important;
+        }
+        html body .gm-course-table th {
+            background: var(--gm-fill) !important;
+            color: var(--gm-text-3) !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            padding: 10px 12px !important;
+        }
+        html body .gm-course-table td {
+            color: var(--gm-text-2) !important;
+            font-size: 13px !important;
+            border-bottom: 1px solid var(--gm-border-light) !important;
+            padding: 11px 12px !important;
+        }
+        html body .gm-course-table tr:hover td {
+            background: var(--gm-fill) !important;
+        }
+        html body .gm-timetable {
+            border: 1px solid var(--gm-border) !important;
+        }
+        html body .gm-timetable th {
+            background: var(--gm-fill) !important;
+            color: var(--gm-text-3) !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            border-color: var(--gm-border) !important;
+        }
+        html body .gm-timetable td {
+            border-color: var(--gm-border) !important;
+        }
+        html body .gm-tt-name {
+            font-size: 12px !important;
+            font-weight: 700 !important;
+        }
+        html body .gm-tt-info {
+            color: var(--gm-text-3) !important;
+            font-size: 11px !important;
+        }
+        html body .gm-tt-tag {
+            border-radius: 4px !important;
+            font-size: 10.5px !important;
+        }
+        html body .gm-tt-course-block {
+            border-radius: var(--gm-radius-sm) !important;
+        }
+        html body .gm-tt-footer {
+            color: var(--gm-text-3) !important;
+            font-size: 11.5px !important;
+        }
+        html body .gm-tab-item {
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: var(--gm-text-3) !important;
+            border-bottom-width: 2px !important;
+            padding: 12px 10px 10px !important;
+        }
+        html body .gm-tab-item.active {
+            color: var(--gm-primary-text) !important;
+            border-bottom-color: var(--gm-primary) !important;
+        }
+        html body .gm-tabs {
+            gap: 4px !important;
+        }
+
+        /* ---------- 悬浮球与菜单 ---------- */
+        html body .gm-float-ball {
+            width: 48px !important;
+            height: 48px !important;
+            background: var(--gm-primary) !important;
+            box-shadow: 0 10px 24px rgba(64, 158, 255, .32) !important;
+            transition: transform .18s ease, background .18s ease, box-shadow .18s ease !important;
+        }
+        html body .gm-float-ball:hover {
+            background: var(--gm-primary-hover) !important;
+            transform: scale(1.07) !important;
+            box-shadow: 0 14px 30px rgba(64, 158, 255, .38) !important;
+        }
+        html body .gm-float-menu {
+            width: 240px !important;
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow-lg) !important;
+            padding: 6px !important;
+            font-family: var(--gm-font) !important;
+        }
+        html body .gm-menu-group-title {
+            font-family: var(--gm-font) !important;
+            font-size: 11px !important;
+            color: var(--gm-text-4) !important;
+            padding: 8px 10px 4px !important;
+            margin-top: 4px !important;
+            border-top: 1px solid var(--gm-border-light) !important;
+            letter-spacing: .08em !important;
+            font-weight: 700 !important;
+        }
+        html body .gm-menu-item {
+            font-family: var(--gm-font) !important;
+            padding: 9px 10px !important;
+            border-radius: var(--gm-radius) !important;
+            color: var(--gm-text-2) !important;
+            font-size: 13px !important;
+            gap: 9px !important;
+            font-weight: 400 !important;
+        }
+        html body .gm-menu-item:hover:not(:disabled) {
+            background: var(--gm-primary-light) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-menu-item:disabled {
+            color: var(--gm-text-4) !important;
+        }
+        html body .gm-menu-item .gm-icon {
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-menu-item:hover:not(:disabled) .gm-icon {
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-float-menu::-webkit-scrollbar,
+        html body .gm-help-body::-webkit-scrollbar,
+        html body .gm-fl-body::-webkit-scrollbar,
+        html body .gm-ps-list-container::-webkit-scrollbar,
+        html body .gm-semester-list::-webkit-scrollbar,
+        html body .gpa-modal-body::-webkit-scrollbar {
+            width: 6px !important;
+        }
+        html body .gm-float-menu::-webkit-scrollbar-thumb,
+        html body .gm-help-body::-webkit-scrollbar-thumb,
+        html body .gm-fl-body::-webkit-scrollbar-thumb,
+        html body .gm-ps-list-container::-webkit-scrollbar-thumb,
+        html body .gm-semester-list::-webkit-scrollbar-thumb,
+        html body .gpa-modal-body::-webkit-scrollbar-thumb {
+            background: var(--gm-border) !important;
+            border-radius: 3px !important;
+        }
+
+        /* ---------- GmDialog ---------- */
+        html body .gm-dialog {
+            width: min(420px, 92vw) !important;
+        }
+        html body .gm-dialog-body {
+            padding: 22px 24px 18px !important;
+            gap: 14px !important;
+        }
+        html body .gm-dialog-title {
+            font-family: var(--gm-font) !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            margin-bottom: 4px !important;
+        }
+        html body .gm-dialog-text {
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            color: var(--gm-text-2) !important;
+            line-height: 1.8 !important;
+        }
+        html body .gm-dialog-icon {
+            width: 38px !important;
+            height: 38px !important;
+            border-radius: 50% !important;
+            background: var(--gm-fill) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        html body .gm-dialog-footer {
+            padding: 4px 24px 20px !important;
+            gap: 10px !important;
+        }
+
+        /* ---------- 友情链接 ---------- */
+        html body .gm-fl-modal {
+            width: min(780px, 94vw) !important;
+            background: #fff !important;
+        }
+        html body .gm-fl-header {
+            background: #fff !important;
+        }
+        html body .gm-fl-body {
+            padding: 20px 24px !important;
+            background: #fff !important;
+            max-height: 62vh !important;
+        }
+        html body .gm-fl-category {
+            margin-bottom: 20px !important;
+        }
+        html body .gm-fl-cat-title {
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-2) !important;
+            margin-bottom: 10px !important;
+            gap: 7px !important;
+        }
+        html body .gm-fl-grid {
+            gap: 10px !important;
+        }
+        html body .gm-fl-card {
+            padding: 12px !important;
+            border-radius: var(--gm-radius) !important;
+            border: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+            transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease !important;
+        }
+        html body .gm-fl-card:hover {
+            border-color: var(--gm-primary-border) !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+            transform: translateY(-2px) !important;
+        }
+        html body .gm-fl-icon-box {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: var(--gm-radius) !important;
+            flex: none !important;
+        }
+        html body .gm-fl-name {
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-fl-desc {
+            font-size: 11px !important;
+            color: var(--gm-text-3) !important;
+        }
+
+        /* ---------- 课程关注 ---------- */
+        html body .gm-modal-content {
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow-lg) !important;
+        }
+        html body #gm-modal-overlay .gm-modal-content {
+            max-width: 1040px !important;
+        }
+        html body .gm-course-table th:nth-child(3),
+        html body .gm-course-table td:nth-child(3) {
+            white-space: nowrap !important;
+        }
+        html body .gm-filter-bar {
+            padding: 12px 20px !important;
+            background: var(--gm-fill) !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            gap: 12px !important;
+        }
+        html body .gm-filter-label {
+            font-size: 12px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-filter-select {
+            border-radius: var(--gm-radius-sm) !important;
+        }
+        html body #gm-total-credits {
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-btn-clear-all {
+            min-height: 28px !important;
+            height: auto !important;
+            padding: 0 10px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            border: 1px solid var(--gm-danger-border) !important;
+            background: var(--gm-danger-bg) !important;
+            color: var(--gm-danger-text) !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-btn-clear-all:hover {
+            background: var(--gm-danger) !important;
+            color: #fff !important;
+        }
+        html body .gm-btn-unfollow {
+            min-height: 28px !important;
+            height: auto !important;
+            padding: 0 9px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            border: 1px solid var(--gm-danger-border) !important;
+            background: var(--gm-danger-bg) !important;
+            color: var(--gm-danger-text) !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-btn-unfollow:hover {
+            background: var(--gm-danger) !important;
+            color: #fff !important;
+        }
+        html body .gm-empty-state {
+            color: var(--gm-text-3) !important;
+        }
+
+        /* ---------- GPA ---------- */
+        html body .gpa-report-modal {
+            background: var(--gm-fill) !important;
+        }
+        html body .gpa-modal-body {
+            padding: 22px 24px !important;
+            background: var(--gm-fill) !important;
+        }
+        html body .gpa-modal-grid {
+            gap: 16px !important;
+        }
+        html body .current-gpa-module,
+        html body .gpa-calc-card,
+        html body .gpa-report-modal details {
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+        }
+        html body .gpa-report-modal h3 {
+            font-family: var(--gm-font) !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gpa-report-modal p,
+        html body .gpa-report-modal li {
+            font-family: var(--gm-font) !important;
+            font-size: 12.5px !important;
+            color: var(--gm-text-2) !important;
+            line-height: 1.8 !important;
+        }
+        html body .gpa-report-modal strong {
+            color: var(--gm-text-1);
+            font-weight: 600;
+        }
+        html body .gpa-report-modal summary {
+            padding: 13px 16px !important;
+            font-size: 13px !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gpa-report-modal summary:hover {
+            background: var(--gm-primary-light) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gpa-report-modal details[open] > summary {
+            background: var(--gm-fill) !important;
+            border-bottom-color: var(--gm-border) !important;
+        }
+        html body .gpa-calc-card h4 {
+            font-size: 14px !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .input-group label {
+            font-size: 12px !important;
+            color: var(--gm-text-2) !important;
+            font-weight: 600 !important;
+        }
+        html body .input-group input {
+            background: #fff !important;
+        }
+        html body .calculate-btn {
+            min-height: 34px !important;
+            padding: 0 14px !important;
+            font-size: 13px !important;
+        }
+        html body .prediction-result {
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-success-bg) !important;
+            border: 1px solid var(--gm-success-border) !important;
+            color: var(--gm-success-text) !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+        }
+        html body .gpa-report-modal .tooltip-q {
+            width: 16px !important;
+            height: 16px !important;
+            font-size: 11px !important;
+            background: var(--gm-text-4) !important;
+        }
+        html body .gpa-report-modal .tooltip-q:hover::after {
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-text-1) !important;
+            box-shadow: var(--gm-shadow) !important;
+            font-size: 11.5px !important;
+        }
+        html body .disclaimer {
+            font-size: 11.5px !important;
+            color: var(--gm-text-4) !important;
+            border-top-color: var(--gm-border) !important;
+        }
+
+        /* ---------- 导出学期面板 ---------- */
+        html body .semester-checkbox-container {
+            width: min(460px, 92vw) !important;
+            padding: 22px 24px !important;
+        }
+        html body .semester-checkbox-container h3 {
+            font-family: var(--gm-font) !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            margin-bottom: 16px !important;
+        }
+        html body .gm-semester-list {
+            gap: 8px !important;
+            max-height: 270px !important;
+            margin-bottom: 16px !important;
+        }
+        html body .gm-semester-item {
+            padding: 9px 11px !important;
+            border-radius: var(--gm-radius) !important;
+            border: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+            color: var(--gm-text-2) !important;
+            font-size: 12.5px !important;
+        }
+        html body .gm-semester-item:hover {
+            border-color: var(--gm-primary-border) !important;
+            background: var(--gm-primary-light) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-semester-item input[type="checkbox"] {
+            width: 16px !important;
+            height: 16px !important;
+            margin-right: 9px !important;
+        }
+        html body .button-container {
+            border-top: 1px solid var(--gm-border) !important;
+            padding-top: 14px !important;
+            gap: 8px !important;
+        }
+
+        /* ---------- 人员检索 ---------- */
+        html body .gm-ps-left {
+            width: 340px !important;
+            background: var(--gm-fill) !important;
+            border-right: 1px solid var(--gm-border) !important;
+        }
+        html body .gm-ps-search-box {
+            padding: 14px !important;
+            background: #fff !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            box-shadow: none !important;
+        }
+        html body .gm-ps-input {
+            height: 36px !important;
+            border-radius: var(--gm-radius) !important;
+        }
+        html body .gm-ps-btn {
+            height: 36px !important;
+            min-height: 36px !important;
+            border-radius: var(--gm-radius) !important;
+        }
+        html body .gm-ps-list-item {
+            padding: 13px 18px !important;
+            border-bottom: 1px solid var(--gm-border-light) !important;
+            background: #fff !important;
+        }
+        html body .gm-ps-list-item:hover {
+            background: var(--gm-primary-light) !important;
+        }
+        html body .gm-ps-list-item.active {
+            background: var(--gm-primary-light) !important;
+        }
+        html body .gm-ps-list-item.active::before {
+            width: 3px !important;
+            background: var(--gm-primary) !important;
+        }
+        html body .gm-ps-item-name {
+            font-size: 13.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-ps-item-id {
+            font-family: var(--gm-mono) !important;
+            font-size: 11.5px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-ps-card {
+            width: min(360px, 100%) !important;
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow) !important;
+        }
+        html body .gm-ps-card-header {
+            height: 92px !important;
+            background: linear-gradient(135deg, var(--gm-primary), #60a5fa) !important;
+        }
+        html body .gm-ps-avatar {
+            width: 76px !important;
+            height: 76px !important;
+            border: 4px solid #fff !important;
+            color: var(--gm-primary-text) !important;
+            font-size: 30px !important;
+            box-shadow: var(--gm-shadow) !important;
+        }
+        html body .gm-ps-card-body {
+            padding: 46px 24px 22px !important;
+        }
+        html body .gm-ps-info-label {
+            font-size: 11.5px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-ps-info-value {
+            font-size: 13px !important;
+            color: var(--gm-text-1) !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-ps-info-row,
+        html body .gm-ps-info-grid {
+            border-bottom-color: var(--gm-border) !important;
+        }
+        html body .gm-ps-loader {
+            color: var(--gm-text-3) !important;
+            font-size: 13px !important;
+        }
+
+        /* ---------- 自动评教 ---------- */
+        html body .gm-eval-body {
+            padding: 16px 20px !important;
+            background: var(--gm-fill) !important;
+        }
+        html body .gm-course-group {
+            border-radius: var(--gm-radius) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+        }
+        html body .gm-course-header {
+            padding: 9px 14px !important;
+            background: var(--gm-primary-light) !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            color: var(--gm-primary-text) !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+        }
+        html body .gm-course-status-tag {
+            font-weight: 600 !important;
+        }
+        html body .gm-teacher-row {
+            padding: 10px 14px !important;
+            border-bottom: 1px solid var(--gm-border-light) !important;
+        }
+        html body .gm-t-name {
+            font-size: 12.5px !important;
+            color: var(--gm-text-2) !important;
+        }
+        html body .gm-done-badge {
+            border-radius: 4px !important;
+            color: var(--gm-success-text) !important;
+            border-color: var(--gm-success) !important;
+        }
+        html body .gm-status-pending {
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-status-running {
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-status-success {
+            color: var(--gm-success-text) !important;
+        }
+        html body .gm-status-error {
+            color: var(--gm-danger-text) !important;
+        }
+        html body .gm-modal-footer {
+            padding: 14px 24px !important;
+            border-top: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+        }
+        html body .gm-row-done {
+            background: #fcfcfd !important;
+        }
+
+        /* ---------- 使用说明 ---------- */
+        html body .gm-help-modal {
+            width: min(720px, 92vw) !important;
+        }
+        html body .gm-help-body {
+            background: #fff !important;
+        }
+        html body .gm-help-section {
+            padding: 16px 24px !important;
+            border-bottom: 1px solid var(--gm-border-light) !important;
+            background: #fff !important;
+            margin: 0 !important;
+        }
+        html body .gm-help-sec-title {
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            padding-left: 10px !important;
+            border-left: 4px solid var(--gm-primary) !important;
+            margin-bottom: 10px !important;
+        }
+        html body .gm-help-step {
+            font-size: 12.5px !important;
+            color: var(--gm-text-2) !important;
+            line-height: 1.75 !important;
+            margin-bottom: 8px !important;
+        }
+        html body .gm-help-step::before {
+            color: var(--gm-text-4) !important;
+        }
+
+        /* ---------- 课表悬浮窗 ---------- */
+        html body .gm-schedule-box {
+            padding: 14px !important;
+            border-radius: var(--gm-radius-lg) !important;
+            border: 1px solid var(--gm-border) !important;
+            box-shadow: var(--gm-shadow) !important;
+            background: #fff !important;
+            font-family: var(--gm-font) !important;
+        }
+        html body .gm-status-bar {
+            background: var(--gm-warning-bg) !important;
+            border: 1px solid var(--gm-warning-border) !important;
+            border-radius: var(--gm-radius) !important;
+            color: var(--gm-warning-text) !important;
+            padding: 8px 10px !important;
+            font-size: 12px !important;
+        }
+        html body .gm-sch-table {
+            border: 1px solid var(--gm-border) !important;
+            color: var(--gm-text-2) !important;
+            font-size: 11.5px !important;
+        }
+        html body .gm-sch-table th {
+            background: var(--gm-fill) !important;
+            color: var(--gm-text-3) !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            border-color: var(--gm-border) !important;
+        }
+        html body .gm-sch-table td {
+            border-color: var(--gm-border) !important;
+            color: var(--gm-text-2) !important;
+            font-size: 11.5px !important;
+        }
+        html body .gm-sch-highlight {
+            color: var(--gm-primary-text) !important;
+            font-weight: 700 !important;
+        }
+        html body .gm-schedule-footer {
+            color: var(--gm-text-3) !important;
+            font-size: 11.5px !important;
+        }
+        html body .gm-schedule-btn {
+            min-height: 30px !important;
+            height: auto !important;
+            padding: 0 12px !important;
+            border-radius: var(--gm-radius) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-btn-go {
+            background: var(--gm-primary) !important;
+        }
+        html body .gm-btn-close {
+            background: var(--gm-danger) !important;
+        }
+
+        /* ---------- 教材清单 ---------- */
+        html body .gm-textbook-wrapper {
+            padding: 18px !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+        }
+        html body .gm-textbook-title {
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            border-left: 4px solid var(--gm-primary) !important;
+            padding-left: 10px !important;
+            margin-bottom: 12px !important;
+        }
+        html body .gm-textbook-table {
+            font-size: 12.5px !important;
+        }
+        html body .gm-textbook-table th {
+            background: var(--gm-fill) !important;
+            color: var(--gm-text-3) !important;
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            border-color: var(--gm-border) !important;
+        }
+        html body .gm-textbook-table td {
+            border-color: var(--gm-border-light) !important;
+            color: var(--gm-text-2) !important;
+        }
+        html body .gm-textbook-table tr:hover {
+            background: var(--gm-fill) !important;
+        }
+        html body .gm-textbook-empty {
+            color: var(--gm-text-3) !important;
+            font-size: 12.5px !important;
+        }
+        html body .gm-textbook-course,
+        html body .gm-textbook-course a {
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-online-cell {
+            background: var(--gm-warning-bg) !important;
+            color: var(--gm-warning-text) !important;
+        }
+        html body .gm-online-btn {
+            border-radius: var(--gm-radius-sm) !important;
+            font-size: 11.5px !important;
+            padding: 3px 10px !important;
+            background: var(--gm-primary) !important;
+        }
+
+        /* ---------- 画像趋势 ---------- */
+        html body .gm-trend-toggle-btn {
+            border-radius: var(--gm-radius) !important;
+            border: 1px solid var(--gm-border) !important;
+            background: #fff !important;
+            color: var(--gm-text-2) !important;
+            font-size: 12px !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-trend-toggle-btn:hover,
+        html body .gm-trend-toggle-btn.active {
+            background: var(--gm-primary-light) !important;
+            border-color: var(--gm-primary-border) !important;
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-trend-card {
+            border-radius: var(--gm-radius) !important;
+            border: 1px solid var(--gm-border) !important;
+            background: var(--gm-fill) !important;
+        }
+        html body .gm-trend-card:hover {
+            background: #fff !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+        }
+        html body .gm-tc-title {
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-tc-row {
+            font-size: 11.5px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-tc-val {
+            font-family: var(--gm-mono) !important;
+            font-size: 12px !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-tooltip-trigger:hover::after {
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-text-1) !important;
+            font-size: 11.5px !important;
+        }
+
+        /* ---------- Toast ---------- */
+        html body .gm-arc-toast {
+            padding: 10px 16px !important;
+            border-radius: var(--gm-radius) !important;
+            box-shadow: var(--gm-shadow) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 12.5px !important;
+            border-left-width: 3px !important;
+        }
+
+        /* ---------- 选课助手：折叠按钮 / 教师链接 ---------- */
+        html body #gm-collapse-toggle-btn {
+            box-shadow: none !important;
+            background: #fff !important;
+            border: 1px solid var(--gm-border) !important;
+            color: var(--gm-primary-text) !important;
+            font-weight: 600 !important;
+            font-size: 13px !important;
+        }
+        html body #gm-collapse-toggle-btn:hover {
+            background: var(--gm-primary-light) !important;
+            border-color: var(--gm-primary-border) !important;
+        }
+        html body .gm-teacher-link {
+            color: var(--gm-primary-text) !important;
+        }
+        html body .gm-teacher-link:hover {
+            color: var(--gm-primary-hover) !important;
+            background: var(--gm-primary-light) !important;
+            border-radius: 4px !important;
+        }
+
+        /* ---------- 选课助手：学期下拉 ---------- */
+        html body .gm-lesson-panel {
+            width: 200px !important;
+            padding: 0 !important;
+        }
+        html body .gm-lesson-panel__header {
+            padding: 10px 12px !important;
+            background: var(--gm-fill) !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            border-radius: var(--gm-radius-lg) var(--gm-radius-lg) 0 0 !important;
+            font-family: var(--gm-font) !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: move !important;
+            user-select: none !important;
+        }
+        html body .gm-lesson-panel__body {
+            padding: 12px !important;
+        }
+        html body .gm-semester-dd {
+            position: relative !important;
+            margin-bottom: 10px !important;
+        }
+        html body .gm-semester-dd__trigger {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            position: relative !important;
+        }
+        html body .gm-semester-dd__chevron {
+            position: absolute !important;
+            right: 10px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            pointer-events: none !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-semester-dd__list {
+            position: absolute !important;
+            top: calc(100% + 4px) !important;
+            left: 0 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            overflow-y: auto !important;
+            background: #fff !important;
+            border: 1px solid var(--gm-border) !important;
+            border-radius: var(--gm-radius) !important;
+            box-shadow: var(--gm-shadow) !important;
+            padding: 4px !important;
+            z-index: 10 !important;
+        }
+        html body .gm-semester-dd__item {
+            height: 32px !important;
+            padding: 7px 8px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            font-family: var(--gm-font) !important;
+            font-size: 12px !important;
+            color: var(--gm-text-2) !important;
+            line-height: 18px !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            box-sizing: border-box !important;
+        }
+        html body .gm-semester-dd__item:hover {
+            background: var(--gm-fill) !important;
+        }
+        html body .gm-semester-dd__item.is-selected {
+            background: var(--gm-primary-light) !important;
+            color: var(--gm-primary-text) !important;
+            font-weight: 600 !important;
+        }
+        html body .gm-lesson-panel__sync {
+            width: 100% !important;
+            min-height: 36px !important;
+            height: auto !important;
+            border: 0 !important;
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-primary) !important;
+            color: #fff !important;
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+        }
+        html body .gm-lesson-panel__sync:hover {
+            background: var(--gm-primary-hover) !important;
+        }
+
+        /* ---------- 同步弹窗 / 存档 ---------- */
+        html body .gm-sync-modal-card {
+            width: min(440px, 94vw) !important;
+            padding: 0 !important;
+        }
+        html body .gm-sync-modal-header {
+            padding: 16px 24px !important;
+            border-bottom: 1px solid var(--gm-border) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            margin: 0 !important;
+        }
+        html body .gm-sync-modal-title {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        html body .gm-sync-modal-body {
+            padding: 20px 24px 22px !important;
+        }
+        html body .gm-sync-actions {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+        }
+        html body .gm-sync-action {
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
+            width: 100% !important;
+            padding: 12px 14px !important;
+            border: 1px solid var(--gm-border) !important;
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-fill) !important;
+            text-align: left !important;
+            transition: border-color .18s ease, background .18s ease, transform .18s ease !important;
+        }
+        html body .gm-sync-action:hover {
+            border-color: var(--gm-primary-border) !important;
+            background: var(--gm-primary-light) !important;
+            transform: translateY(-1px) !important;
+        }
+        html body .gm-sync-action b {
+            display: block !important;
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-sync-action small {
+            display: block !important;
+            margin-top: 2px !important;
+            font-family: var(--gm-font) !important;
+            font-size: 11.5px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-sync-action__icon {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: var(--gm-radius) !important;
+            background: #fff !important;
+            box-shadow: var(--gm-shadow-sm) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: var(--gm-primary-text) !important;
+            flex: none !important;
+        }
+        html body .gm-sync-action__icon--orange {
+            color: var(--gm-warning-text) !important;
+        }
+        html body .gm-sync-archive {
+            margin-top: 18px !important;
+            padding-top: 16px !important;
+            border-top: 1px solid var(--gm-border) !important;
+        }
+        html body .gm-sync-archive__title {
+            display: flex !important;
+            align-items: center !important;
+            gap: 7px !important;
+            font-family: var(--gm-font) !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+        }
+        html body .gm-archive-list {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            margin-top: 10px !important;
+        }
+        html body .gm-archive-slot {
+            border: 1px solid var(--gm-border) !important;
+            border-radius: var(--gm-radius) !important;
+            background: var(--gm-fill) !important;
+            padding: 10px 12px !important;
+            transition: border-color .18s ease, background .18s ease !important;
+        }
+        html body .gm-archive-slot:hover {
+            border-color: var(--gm-primary-border) !important;
+        }
+        html body .gm-archive-slot.is-active {
+            border-color: var(--gm-primary-border) !important;
+            background: var(--gm-primary-light) !important;
+        }
+        html body .gm-archive-slot.is-empty {
+            border-style: dashed !important;
+            background: var(--gm-fill) !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+            color: var(--gm-text-3) !important;
+            font-size: 12px !important;
+        }
+        html body .gm-archive-slot__top {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+        }
+        html body .gm-archive-slot__icon {
+            color: var(--gm-primary-text) !important;
+            display: inline-flex !important;
+            flex: none !important;
+        }
+        html body .gm-archive-slot.is-empty .gm-archive-slot__icon {
+            color: var(--gm-text-4) !important;
+        }
+        html body .gm-archive-slot__name {
+            font-family: var(--gm-font) !important;
+            font-size: 12.5px !important;
+            font-weight: 700 !important;
+            color: var(--gm-text-1) !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+        }
+        html body .gm-archive-slot__meta {
+            margin-top: 5px !important;
+            font-size: 11.5px !important;
+            color: var(--gm-text-3) !important;
+        }
+        html body .gm-archive-actions {
+            margin-left: auto !important;
+            display: flex !important;
+            gap: 2px !important;
+            flex: none !important;
+        }
+        html body .gm-arc-btn {
+            width: 28px !important;
+            height: 28px !important;
+            border-radius: var(--gm-radius-sm) !important;
+            border: 0 !important;
+            background: transparent !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            cursor: pointer !important;
+        }
+        html body .gm-arc-btn:hover {
+            background: var(--gm-primary-light) !important;
+        }
+        html body .gm-arc-btn--primary { color: var(--gm-primary-text) !important; }
+        html body .gm-arc-btn--success { color: var(--gm-success-text) !important; }
+        html body .gm-arc-btn--success:hover { background: var(--gm-success-bg) !important; }
+        html body .gm-arc-btn--warning { color: var(--gm-warning-text) !important; }
+        html body .gm-arc-btn--warning:hover { background: var(--gm-warning-bg) !important; }
+        html body .gm-arc-btn--danger { color: var(--gm-danger-text) !important; }
+        html body .gm-arc-btn--danger:hover { background: var(--gm-danger-bg) !important; }
+        html body .gm-arc-btn[disabled] { opacity: .38 !important; cursor: not-allowed !important; background: transparent !important; }
+        `;
+        const parent = document.head || document.documentElement;
+        if (parent) parent.appendChild(style);
+    }
+    injectUnifiedDesignSystem();
+
     // 悬浮球 UI 变量
     let floatBall = null;
     let floatMenu = null;
@@ -164,6 +1612,8 @@
     let semesterCheckboxContainer = null;
     let isDataReady = false;
     let isBackgroundSyncing = false;
+    // 版本检查已发现新版本（悬浮球红点与「数据未就绪」徽章共用，需独立记忆避免被数据就绪回调隐藏）
+    let isUpdateAvailable = false;
 
     // --- 配置管理 ---
     const ConfigManager = {
@@ -391,10 +1841,12 @@
                                     const currentVersion = typeof GM_info !== 'undefined' ? GM_info.script.version : '1.0.0';
 
                                     if (UpdateChecker.compareVersion(latestVersion, currentVersion) > 0) {
+                                        isUpdateAvailable = true;
                                         if (btnText) btnText.innerHTML = `<span style="color:#F56C6C;font-weight:bold;display:flex;align-items:center;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>发现新版本 v${latestVersion}</span>`;
                                         const badge = document.querySelector('.gm-float-ball .gm-badge');
                                         if (badge) badge.style.display = 'block';
                                     } else {
+                                        isUpdateAvailable = false;
                                         if (!auto && btnText) btnText.innerHTML = `已是最新版本 (v${currentVersion})`;
                                         else if (auto && btnText) btnText.innerHTML = `检查版本更新 (v${currentVersion})`;
                                     }
@@ -537,7 +1989,7 @@
             try {
                 return JSON.parse(GM_getValue(CONSTANTS.FOLLOWED_COURSES_KEY, '{}'));
             } catch (e) {
-                console.error('[NWPU-Enhanced] 关注列表数据损坏，将返回空列表', e);
+                Logger.error('Follow', '关注列表数据损坏，将返回空列表', e);
                 return {};
             }
         },
@@ -653,6 +2105,33 @@
     }
 
     /**
+     * 从门户 JWT 中同步本科生/研究生身份，供教务页选课时间提醒使用
+     * @param {string} token 门户 localStorage.token
+     */
+    function syncIdentityFromToken(token) {
+        try {
+            const part = String(token || '').split('.')[1];
+            if (!part) return;
+            const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+            const binary = atob(padded);
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const payload = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+            const name = payload.ATTR_identityTypeName || '';
+            const code = payload.ATTR_identityTypeCode || '';
+            let identity = '';
+            if (/研究生/.test(name) || code === 'S02') identity = 'graduate';
+            else if (/本科生/.test(name) || code === 'S01') identity = 'undergraduate';
+            if (!identity) return;
+            GM_setValue(CONSTANTS.USER_IDENTITY_KEY, identity);
+            GM_setValue(CONSTANTS.USER_IDENTITY_NAME_KEY, identity === 'graduate' ? '研究生' : '本科生');
+            Logger.log('Identity', '门户身份: ' + (identity === 'graduate' ? '研究生' : '本科生'));
+        } catch (e) {
+            Logger.warn('Identity', '解析门户身份失败: ' + (e && e.message));
+        }
+    }
+
+    /**
      * 从后端抓取所有成绩数据并缓存
      */
     async function fetchAllDataAndCache(retryCount = 0, options = {}) {
@@ -713,7 +2192,7 @@
                         }
                     }
                 } catch (e) {
-                    console.error("[NWPU-Enhanced] 解析排名数据失败", e);
+                    Logger.error("Initial", "解析排名数据失败", e);
                 }
             }
 
@@ -886,7 +2365,7 @@
                     updateMenuButtonsState(true);
                     isDataReady = true;
                 } catch (error) {
-                    console.error("[NWPU-Enhanced] 后台数据加载失败", error);
+                    Logger.error("Initial", "后台数据加载失败", error);
                 }
             }
         };
@@ -1086,7 +2565,8 @@
             if (floatMenu.classList.contains('show')) hideMenu();
             else {
                 const rect = floatBall.getBoundingClientRect();
-                let left = rect.left - 230;
+                // 菜单宽度由 230 调整为 240，留 10px 间距避免压住悬浮球
+                let left = rect.left - 240 - 10;
                 if (left < 10) left = rect.right + 10;
 
                 floatMenu.style.left = left + 'px';
@@ -1119,7 +2599,7 @@
 
         const badge = floatBall.querySelector('.gm-badge');
         if (badge) {
-            badge.style.display = (!isReady || isBackgroundSyncing) ? 'block' : 'none';
+            badge.style.display = (!isReady || isBackgroundSyncing || isUpdateAvailable) ? 'block' : 'none';
         }
     }
 
@@ -1183,10 +2663,10 @@
             return;
         }
 
-        // 显示同步遮罩
+        // 显示同步遮罩（z-index 高于悬浮球，同步期间不可再操作悬浮球）
         const overlay = document.createElement('div');
         overlay.id = 'gm-sync-overlay';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100000; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
         overlay.innerHTML = `
             <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步选课数据...</div>
             <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新选课学期...</div>
@@ -1364,10 +2844,13 @@
 
             overlay.remove();
             // 游戏式存档：在线同步的新数据静默写入「使用中」的存档（保留自定义命名）
-            ArchiveManager.updateActiveSlot(targetSemesterName);
+            const savedArchiveName = ArchiveManager.updateActiveSlot(targetSemesterName);
+            showToast(savedArchiveName
+                ? `同步完成：${allCourseData.length} 门课程已存入存档【${savedArchiveName}】`
+                : `同步完成：共获取 ${allCourseData.length} 门课程数据`, 'success');
 
         } catch (e) {
-            console.error("同步错误:", e);
+            Logger.error('Sync', "同步错误", e);
             overlay.remove();
             alert('同步失败: ' + e.message);
         }
@@ -1561,7 +3044,7 @@
             if (m) {
                 ts = `${m[1]}${String(m[2]).padStart(2, '0')}${String(m[3]).padStart(2, '0')}T${String(m[4]).padStart(2, '0')}${String(m[5]).padStart(2, '0')}`;
             }
-            const blob = new Blob([JSON.stringify({ exportTime, version: '1.8.3', data: slot.data }, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify({ exportTime, version: GM_info.script.version, data: slot.data }, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -1590,32 +3073,38 @@
             if (!container) return;
             this.ensureStyles();
             const state = this.load();
-            const mkBtn = (act, i, icon, color, tip, extra = '') =>
-                `<button class="gm-arc-btn" data-index="${i}" data-act="${act}" title="${tip}" ${extra} style="color:${color};">${icon}</button>`;
+            const btnClass = {
+                apply: 'gm-arc-btn--primary',
+                export: 'gm-arc-btn--success',
+                rename: 'gm-arc-btn--warning',
+                remove: 'gm-arc-btn--danger'
+            };
+            const mkBtn = (act, i, icon, tip, extra = '') =>
+                `<button type="button" class="gm-arc-btn ${btnClass[act]}" data-index="${i}" data-act="${act}" title="${tip}" ${extra}>${icon}</button>`;
             const opBtns = (i, isSource) =>
-                mkBtn('apply', i, this.ICONS.applyIcon, '#409EFF', isSource ? '当前正在使用此存档' : '启用此存档作为选课助手数据源', isSource ? 'disabled' : '') +
-                mkBtn('export', i, this.ICONS.exportIcon, '#67C23A', '导出此存档为JSON文件') +
-                mkBtn('rename', i, this.ICONS.renameIcon, '#E6A23C', '重命名存档') +
-                mkBtn('remove', i, this.ICONS.removeIcon, '#F56C6C', '删除此存档');
+                mkBtn('apply', i, this.ICONS.applyIcon, isSource ? '当前正在使用此存档' : '启用此存档作为选课助手数据源', isSource ? 'disabled' : '') +
+                mkBtn('export', i, this.ICONS.exportIcon, '导出此存档为JSON文件') +
+                mkBtn('rename', i, this.ICONS.renameIcon, '重命名存档') +
+                mkBtn('remove', i, this.ICONS.removeIcon, '删除此存档');
 
             container.innerHTML = state.slots.map((slot, i) => {
                 const isSource = state.sourceSlot === i;
                 if (!slot) {
                     return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px dashed #dcdfe6;border-radius:8px;background:#fafafa;">
-                        ${this.ICONS.box}
-                        <span style="font-size:13px;color:#909399;">槽位 ${i + 1}：无存档</span>
+                    <div class="gm-archive-slot is-empty">
+                        <span class="gm-archive-slot__icon">${this.ICONS.box}</span>
+                        <span>槽位 ${i + 1}：无存档</span>
                     </div>`;
                 }
                 return `
-                <div style="border:1px solid ${isSource ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${isSource ? '#f0f7ff' : '#f5f7fa'};padding:10px 12px;">
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="color:#409EFF;display:inline-flex;">${this.ICONS.archive}</span>
-                        <b style="font-size:13px;color:#303133;">${esc(slot.name)}</b>
+                <div class="gm-archive-slot ${isSource ? 'is-active' : ''}">
+                    <div class="gm-archive-slot__top">
+                        <span class="gm-archive-slot__icon">${this.ICONS.archive}</span>
+                        <b class="gm-archive-slot__name">${esc(slot.name)}</b>
                         ${isSource ? '<span class="gm-arc-badge">使用中</span>' : ''}
-                        <span style="margin-left:auto;display:flex;gap:4px;">${opBtns(i, isSource)}</span>
+                        <span class="gm-archive-actions">${opBtns(i, isSource)}</span>
                     </div>
-                    <div style="font-size:12px;color:#909399;margin-top:6px;">${slot.count} 门课程 · 更新于 ${slot.savedAt}</div>
+                    <div class="gm-archive-slot__meta">${slot.count} 门课程 · 更新于 ${slot.savedAt}</div>
                 </div>`;
             }).join('');
 
@@ -1750,31 +3239,37 @@
 
         const overlay = document.createElement('div');
         overlay.id = 'gm-sync-modal';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:100010; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); animation:gmFadeIn 0.2s;';
+        overlay.className = 'gm-sync-overlay';
+        overlay.style.cssText = 'position:fixed; inset:0; z-index:100010; display:flex; align-items:center; justify-content:center; animation:gmFadeIn 0.2s;';
         overlay.innerHTML = `
-        <div style="background:#fff; border-radius:12px; width:400px; max-width:92%; padding:22px; box-shadow:0 12px 32px rgba(0,0,0,0.25); font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif; position:relative;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-                <div style="font-size:17px; font-weight:700; color:#303133;">同步最新选课数据</div>
-                <button id="gm-sync-close" style="border:none;background:none;font-size:22px;color:#909399;cursor:pointer;line-height:1;">&times;</button>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <button id="gm-sync-online" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
-                    <span style="display:inline-flex; color:#409EFF;"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
-                    <span><b>在线同步</b><br><span style="font-size:12px;color:#909399;">从教务系统抓取最新选课学期数据</span></span>
-                </button>
-                <button id="gm-sync-import" style="display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border:1px solid #ebeef5; border-radius:8px; background:#f5f7fa; cursor:pointer; text-align:left; transition:background 0.2s;">
-                    <span style="display:inline-flex; color:#E6A23C;"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
-                    <span><b>本地上传</b><br><span style="font-size:12px;color:#909399;">导入他人分享的选课数据</span></span>
-                </button>
-            </div>
-            <div style="margin-top:16px; border-top:1px solid #ebeef5; padding-top:12px;">
-                <div style="font-size:14px; font-weight:600; color:#303133; display:flex; align-items:center; gap:6px; margin-bottom:4px;">
-                    <svg viewBox="0 0 24 24" width="15" height="15" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
-                    数据存档
+        <div class="gm-sync-modal-card">
+            <div class="gm-sync-modal-header">
+                <div class="gm-sync-modal-title">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    同步最新选课数据
                 </div>
-                <div id="gm-archive-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+                <button type="button" id="gm-sync-close" class="gm-modal-close" aria-label="关闭">&times;</button>
             </div>
-            <input type="file" id="gm-sync-file" accept=".json,application/json" style="display:none;">
+            <div class="gm-sync-modal-body">
+                <div class="gm-sync-actions">
+                    <button type="button" id="gm-sync-online" class="gm-sync-action">
+                        <span class="gm-sync-action__icon"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                        <span><b>在线同步</b><small>从教务系统抓取最新选课学期数据</small></span>
+                    </button>
+                    <button type="button" id="gm-sync-import" class="gm-sync-action">
+                        <span class="gm-sync-action__icon gm-sync-action__icon--orange"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
+                        <span><b>本地上传</b><small>导入他人分享的选课数据</small></span>
+                    </button>
+                </div>
+                <div class="gm-sync-archive">
+                    <div class="gm-sync-archive__title">
+                        <svg viewBox="0 0 24 24" width="15" height="15" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                        数据存档
+                    </div>
+                    <div id="gm-archive-list" class="gm-archive-list"></div>
+                </div>
+                <input type="file" id="gm-sync-file" accept=".json,application/json" style="display:none;">
+            </div>
         </div>
         `;
         document.body.appendChild(overlay);
@@ -1799,7 +3294,10 @@
             try {
                 const parsed = JSON.parse(reader.result);
                 const history = (parsed && parsed.data && typeof parsed.data === 'object') ? parsed.data : parsed;
-                if (!history || typeof history !== 'object') throw new Error('格式不正确');
+                // 仅接受「课程ID → 记录数组」的存档结构，防止误导入任意 JSON
+                if (!history || typeof history !== 'object' || Array.isArray(history)) throw new Error('格式不正确');
+                const recordLists = Object.values(history);
+                if (recordLists.length === 0 || !recordLists.every(v => Array.isArray(v))) throw new Error('格式不正确');
                 GM_setValue(CONSTANTS.HISTORY_STORAGE_KEY, JSON.stringify(history));
                 // 本地上传：由用户确认覆盖哪个存档槽位（选定槽位将成为当前使用的存档）
                 ArchiveManager.promptArchive('导入成功！请选择要覆盖的存档槽位。', '导入数据').then(() => showSyncDataModal());
@@ -1934,7 +3432,7 @@
                 </div>
                 <div class="gm-help-step">
                     <b>第2步：管理存档</b><br>
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 选课数据存档</span>，可以：<br>
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 同步最新选课数据</span>，可以：<br>
                     - 查看三个存档槽位的数据状态<br>
                     - 选择某个存档作为当前使用的数据源<br>
                     - 导出存档数据或上传本地数据<br>
@@ -2129,16 +3627,16 @@
                     <tbody>
             `;
                 courses.forEach(c => {
-                    const tpStr = c.timeAndPlace ? c.timeAndPlace.replace(/;/g, '<br>') : '-';
+                    const tpStr = c.timeAndPlace ? esc(String(c.timeAndPlace)).replace(/[;；]\s*/g, '<br>') : '-';
                     html += `
                     <tr>
-                        <td><span class="gm-code-badge">${c.code}</span></td>
-                        <td>${c.name}</td>
-                        <td style="color:#999;font-size:12px;">${c.semester || '历史'}</td>
-                        <td>${c.teachers}</td>
-                        <td align="center">${c.credits}</td>
+                        <td><span class="gm-code-badge">${esc(c.code)}</span></td>
+                        <td>${esc(c.name)}</td>
+                        <td style="color:#999;font-size:12px;">${esc(c.semester || '历史')}</td>
+                        <td>${esc(c.teachers)}</td>
+                        <td align="center">${esc(c.credits)}</td>
                         <td style="font-size:12px;line-height:1.4;">${tpStr}</td>
-                        <td align="center"><button class="gm-btn-unfollow" data-id="${c.id}">取消</button></td>
+                        <td align="center"><button class="gm-btn-unfollow" data-id="${esc(c.id)}">取消</button></td>
                     </tr>`;
                 });
                 html += `</tbody></table>`;
@@ -2218,11 +3716,11 @@
                                 html += `
                                 <div class="gm-tt-course-block"
                                      style="background: ${style.bg}; border-left: 3px solid ${style.border};"
-                                     title="${tooltip}">
-                                    <div class="gm-tt-name">${item.name}</div>
-                                    <div class="gm-tt-info">@${item.segLocation}</div>
+                                     title="${esc(tooltip)}">
+                                    <div class="gm-tt-name">${esc(item.name)}</div>
+                                    <div class="gm-tt-info">@${esc(item.segLocation)}</div>
                                     <div class="gm-tt-info" style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;" title="${item.teachers}">${item.teachers}</span>
+                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;" title="${esc(item.teachers)}">${esc(item.teachers)}</span>
                                         <span class="gm-tt-tag">${weekInfoStr}</span>
                                     </div>
                                 </div>
@@ -2447,10 +3945,11 @@
 
     // ----------------- 2.2 导出成绩 -----------------
 
-    function initExportUI() {
-        if (!document.getElementById('export-ui-styles')) {
-            const style = getOrCreateStyleEl('export-ui-styles');
-            style.textContent = `
+    // 导出面板样式注入（独立函数，initExportUI 与 showSemesterCheckboxes 共用，幂等）
+    function injectExportStyles() {
+        if (document.getElementById('export-ui-styles')) return;
+        const style = getOrCreateStyleEl('export-ui-styles');
+        style.textContent = `
     .semester-bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10001; display: none; transition: all 0.3s; }
     .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
     .semester-checkbox-container h3 { margin: 0 0 20px 0; font-size: 18px; color: #1f1f1f; display: flex; align-items: center; gap: 8px; font-weight: 600; }
@@ -2467,8 +3966,11 @@
     .gm-semester-list::-webkit-scrollbar { width: 6px; }
     .gm-semester-list::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
 `;
-            document.head.appendChild(style);
-        }
+        document.head.appendChild(style);
+    }
+
+    function initExportUI() {
+        injectExportStyles();
         let bgOverlay = document.createElement("div"); bgOverlay.className = "semester-bg-overlay"; document.body.appendChild(bgOverlay);
         semesterCheckboxContainer = document.createElement("div"); semesterCheckboxContainer.className = "semester-checkbox-container"; document.body.appendChild(semesterCheckboxContainer);
         bgOverlay.addEventListener('click', () => { semesterCheckboxContainer.style.display = "none"; });
@@ -2681,15 +4183,15 @@
                     <div class="current-gpa-module">
                         <h3>当前学业总览</h3>
                         <p style="line-height: 2;">
-                            <strong>GPA：</strong> <strong style="color:#409EFF; font-size:16px;">${reportData.gpa}</strong><br>
+                            <strong>GPA：</strong> <strong style="color:#1A6FC4 !important; font-size:16px;">${reportData.gpa}</strong><br>
                             <strong>专业排名：</strong> ${reportData.gpaRankData.rank ?? '无数据'}<br>
                             <strong>前一名GPA：</strong> ${reportData.gpaRankData.beforeRankGpa ?? '无数据'}<br>
                             <strong>后一名GPA：</strong> ${reportData.gpaRankData.afterRankGpa ?? '无数据'}<br>
                             <strong>纳入计算课程：</strong> ${reportData.courseCount} 门<br>
                             <strong>总学分：</strong> ${reportData.totalCredits}<br>
                             <strong>总学分绩点：</strong> ${reportData.totalCreditPoints}<br>
-                            <strong>加权百分制成绩：</strong> <strong style="color:#67C23A;">${reportData.weightedScoreNumeric}</strong> <span class="tooltip-q" data-gm-tooltip="仅计算百分制成绩，不含中文等级制成绩和PNP课程。">?</span><br>
-                            <strong>加权百分制(含中文)：</strong> <strong style="color:#E6A23C;">${reportData.weightedScoreWithMapping}</strong> <span class="tooltip-q" data-gm-tooltip="${tooltipTextWithMapping}">?</span>
+                            <strong>加权百分制成绩：</strong> <strong style="color:#2E7D32 !important;">${reportData.weightedScoreNumeric}</strong> <span class="tooltip-q" data-gm-tooltip="仅计算百分制成绩，不含中文等级制成绩和PNP课程。">?</span><br>
+                            <strong>加权百分制(含中文)：</strong> <strong style="color:#A85B00 !important;">${reportData.weightedScoreWithMapping}</strong> <span class="tooltip-q" data-gm-tooltip="${tooltipTextWithMapping}">?</span>
                         </p>
                     </div>
                     <details class="stuck-analysis-section">
@@ -2700,20 +4202,20 @@
         if (reportData.hasStuckCourses) {
             let stuckCoursesListHTML = '<ul style="padding-left: 20px; margin: 10px 0;">';
             reportData.stuckCoursesList.forEach(course => {
-                stuckCoursesListHTML += `<li>${course['课程名称']} (成绩: ${course['成绩']}, 绩点: ${course['绩点']})</li>`;
+                stuckCoursesListHTML += `<li>${esc(course['课程名称'])} (成绩: ${esc(course['成绩'])}, 绩点: ${esc(course['绩点'])})</li>`;
             });
             stuckCoursesListHTML += '</ul>';
             contentHTML += `
-            <p>发现 <strong style="color:#F56C6C;">${reportData.stuckCoursesCount} 门</strong>卡绩科目，共计 <strong>${reportData.stuckCoursesCredits}</strong> 学分。</p>
+            <p>发现 <strong style="color:#C53030 !important;">${reportData.stuckCoursesCount} 门</strong>卡绩科目，共计 <strong>${reportData.stuckCoursesCredits}</strong> 学分。</p>
             ${stuckCoursesListHTML}
             <p style="margin-top:10px; border-top:1px dashed #eee; padding-top:10px;">如果这些科目成绩均提高1分，您的GPA结果为：</p>
             <p>
                 <strong>总学分绩点：</strong> ${reportData.hypotheticalTotalCreditPoints}<br>
-                <strong>加权平均GPA：</strong> <strong style="color: #67C23A; font-size:16px;">${reportData.hypotheticalGpa}</strong>
+                <strong>加权平均GPA：</strong> <strong style="color: #2E7D32 !important; font-size:16px;">${reportData.hypotheticalGpa}</strong>
             </p>
         `;
         } else {
-            contentHTML += `<p style="color:#67C23A; font-weight:bold; text-align:center; padding: 10px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
+            contentHTML += `<p style="color:#2E7D32 !important; font-weight:bold; text-align:center; padding: 10px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
         }
 
         contentHTML += `
@@ -3102,7 +4604,7 @@
             const isFail = parseFloat(score) < 60 && !isNaN(parseFloat(score));
             const scoreStyle = isFail ? 'color: #F56C6C; font-weight: bold;' : '';
             const passStatus = getPassStatus(score);
-            return `<tr class="el-table__row"><td class="cell-style"><div class="cell">${index + 1}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${grade['课程名称'] || ''}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${grade['课程代码'] || ''}</div></td><td class="cell-style"><div class="cell el-tooltip">${grade['学期'] || ''}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${grade['是否必修'] ? '是' : '否'}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${grade['学分'] || ''}</div></td><td class="cell-style"><div class="cell el-tooltip" style="${scoreStyle}">${grade['成绩'] || ''}</div></td><td class="cell-style"><div class="cell el-tooltip">${grade['绩点'] ?? ''}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${classRankMap.get(grade['课程代码']) || '-'}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${passStatus}</div></td></tr>`;
+            return `<tr class="el-table__row"><td class="cell-style"><div class="cell">${index + 1}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(grade['课程名称'] || '')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['课程代码'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学期'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${grade['是否必修'] ? '是' : '否'}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学分'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip" style="${scoreStyle}">${esc(grade['成绩'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['绩点'] ?? '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(classRankMap.get(grade['课程代码']) || '-')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${passStatus}</div></td></tr>`;
         }).join('');
 
         const bodyHTML = `<div class="el-table__body-wrapper is-scrolling-left"><table cellspacing="0" cellpadding="0" border="0" class="el-table__body" style="width: 100%;">${colGroupHTML}<tbody>${tableBodyRows}</tbody></table></div>`;
@@ -3202,7 +4704,11 @@
     }
 
     async function enhancePortraitPage() {
-        while (!document.body || !document.querySelector(".score-content")) { await new Promise(resolve => setTimeout(resolve, 50)); }
+        // 最多等待 30 秒，避免页面结构变更后永久轮询
+        for (let waitedMs = 0; !document.body || !document.querySelector(".score-content"); waitedMs += 50) {
+            if (waitedMs >= 30000) { Logger.warn("2.4", "等待 .score-content 超时，画像增强未启动"); return; }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
         Logger.log("2.4", "脚本已在学生画像页激活");
         injectTooltipStylesForPortrait();
 
@@ -3319,7 +4825,7 @@
             API_BASE: '/student/for-std/lesson-search/semester',
             API_FIELDS: 'course.code,minorCourse.nameZh,courseType,openDepartment,teacherAssignmentList,examMode,campus,teachLang,roomType,timeTableLayout,crossBizTypes,courseProperty',
             PAGE_SIZE: 1000, // 使用 queryPage__ 参数格式，服务端支持最大1000条/页
-            MAX_VISIBLE_SEMESTERS: 10, // 学期下拉列表每屏最多显示条数（超出可滚动查看）
+            MAX_VISIBLE_SEMESTERS: 5, // 学期下拉列表每屏最多显示条数（超出可滚动查看）
             SEMESTER_ITEM_HEIGHT: 32, // 下拉列表单项高度(px)，用于计算列表最大高度
             // 保留 DOM 选择器用于渲染历史标签
             TABLE_ROWS: '#table tbody tr'
@@ -3330,6 +4836,9 @@
             if (this._initialized) return;
             if (!window.location.href.includes('/student/for-std/lesson-search')) return;
             if (!document.querySelector('.page-config') || !document.querySelector('#table')) {
+                // 最多重试 50 次（约 15 秒），避免目标容器缺失时无限轮询
+                this._initRetries = (this._initRetries || 0) + 1;
+                if (this._initRetries > 50) { Logger.warn("2.5", "等待页面容器超时，选课助手面板未注入"); return; }
                 setTimeout(() => this.init(), 300);
                 return;
             }
@@ -3420,12 +4929,10 @@
             list.innerHTML = '';
             semesterOptions.forEach(opt => {
                 const item = document.createElement('div');
+                item.className = 'gm-semester-dd__item';
                 item.dataset.value = opt.value;
                 item.textContent = opt.text;
                 item.title = opt.text;
-                item.style.cssText = `height:${this.CONFIG.SEMESTER_ITEM_HEIGHT}px; box-sizing:border-box; padding:7px 10px; font-size:13px; line-height:18px; cursor:pointer; color:#606266; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
-                item.onmouseover = () => { if (item.dataset.selected !== '1') item.style.background = '#f5f7fa'; };
-                item.onmouseout = () => { if (item.dataset.selected !== '1') item.style.background = ''; };
                 item.onclick = (e) => {
                     e.stopPropagation();
                     this.selectSemester(opt);
@@ -3448,9 +4955,7 @@
                 Array.from(list.children).forEach(el => {
                     const isSel = el.dataset.value === opt.value;
                     el.dataset.selected = isSel ? '1' : '0';
-                    el.style.background = isSel ? '#f0f7ff' : '';
-                    el.style.color = isSel ? '#409EFF' : '#606266';
-                    el.style.fontWeight = isSel ? 'bold' : 'normal';
+                    el.classList.toggle('is-selected', isSel);
                 });
             }
         },
@@ -3475,24 +4980,24 @@
 
             const panel = document.createElement('div');
             panel.id = 'gm-lesson-helper-panel';
+            panel.className = 'gm-lesson-panel';
             panel.innerHTML = `
-            <div style="background:#f5f7fa; border-bottom:1px solid #ebeef5; padding:10px; border-radius:12px 12px 0 0; font-weight:bold; position:relative; cursor:move; user-select:none; color:#303133;" id="gm-panel-header">
+            <div class="gm-lesson-panel__header" id="gm-panel-header">
                 选课助手
-                <span id="gm-panel-close" style="position:absolute; right:10px; color:#999; cursor:pointer; font-size:18px; line-height:1; font-weight:bold;" title="关闭面板">×</span>
+                <button type="button" id="gm-panel-close" class="gm-modal-close" title="关闭面板">&times;</button>
             </div>
-            <div style="padding:15px;">
-                <div id="gm-semester-dd" style="position:relative; margin-bottom:10px;">
-                    <div id="gm-semester-dd-trigger" style="width:100%; box-sizing:border-box; padding:6px 28px 6px 8px; border-radius:4px; border:1px solid #dcdfe6; font-size:14px; cursor:pointer; background:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; position:relative; transition:border-color 0.2s;">
-                        <span id="gm-semester-dd-text" style="color:#c0c4cc;">加载学期列表中...</span>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#c0c4cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); pointer-events:none;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <div class="gm-lesson-panel__body">
+                <div id="gm-semester-dd" class="gm-semester-dd">
+                    <div id="gm-semester-dd-trigger" class="gm-semester-dd__trigger">
+                        <span id="gm-semester-dd-text">加载学期列表中...</span>
+                        <svg class="gm-semester-dd__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
-                    <div id="gm-semester-dd-list" style="display:none; position:absolute; top:calc(100% + 4px); left:0; width:100%; box-sizing:border-box; max-height:${this.CONFIG.MAX_VISIBLE_SEMESTERS * this.CONFIG.SEMESTER_ITEM_HEIGHT}px; overflow-y:auto; background:#fff; border:1px solid #e4e7ed; border-radius:4px; box-shadow:0 2px 12px rgba(0,0,0,0.12); z-index:10;"></div>
+                    <div id="gm-semester-dd-list" class="gm-semester-dd__list" style="display:none; max-height:${this.CONFIG.MAX_VISIBLE_SEMESTERS * this.CONFIG.SEMESTER_ITEM_HEIGHT}px;"></div>
                 </div>
-                <button id="gm-btn-sync-start" style="width:100%; padding:8px; background:#409EFF; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold; transition: background 0.2s;">存储选定学期课程信息</button>
-                </div>
+                <button type="button" id="gm-btn-sync-start" class="gm-lesson-panel__sync">存储选定学期课程信息</button>
             </div>
         `;
-            panel.style.cssText = `position:fixed; top:120px; right:30px; z-index:99999; background:white; border:1px solid #ebeef5; border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.15); width:240px; font-size:14px; font-family:"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;`;
+            panel.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999;';
             document.body.appendChild(panel);
 
             const btnSync = document.getElementById('gm-btn-sync-start');
@@ -3500,33 +5005,49 @@
             const semesterDd = document.getElementById('gm-semester-dd');
             const semesterTrigger = document.getElementById('gm-semester-dd-trigger');
 
-            btnClose.onclick = () => { panel.style.display = 'none'; };
+            // 关闭后保留一个「选课助手」小按钮，点击即可重新打开面板（无需刷新页面）
+            btnClose.onclick = () => {
+                panel.style.display = 'none';
+                if (document.getElementById('gm-lesson-helper-reopen')) return;
+                const reopenBtn = document.createElement('button');
+                reopenBtn.id = 'gm-lesson-helper-reopen';
+                reopenBtn.type = 'button';
+                reopenBtn.textContent = '选课助手';
+                reopenBtn.title = '重新打开选课助手面板';
+                reopenBtn.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999; padding:8px 14px; border:1px solid var(--gm-border); border-radius:8px; background:#fff; color:var(--gm-primary-text); font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.12);';
+                reopenBtn.onclick = () => { reopenBtn.remove(); panel.style.display = 'block'; };
+                document.body.appendChild(reopenBtn);
+            };
             btnSync.onclick = () => this.startSyncProcess();
-            btnSync.onmouseover = () => btnSync.style.background = '#66b1ff';
-            btnSync.onmouseout = () => btnSync.style.background = '#409EFF';
 
             semesterTrigger.onclick = (e) => { e.stopPropagation(); this.toggleSemesterList(); };
-            semesterTrigger.onmouseover = () => semesterTrigger.style.borderColor = '#409EFF';
-            semesterTrigger.onmouseout = () => semesterTrigger.style.borderColor = '#dcdfe6';
             document.addEventListener('click', (e) => {
                 if (semesterDd && !semesterDd.contains(e.target)) this.toggleSemesterList(false);
             });
 
             const header = document.getElementById('gm-panel-header');
             let isDragging = false, startX, startY, initialLeft, initialTop;
-            header.onmousedown = (e) => {
-                if (e.target === btnClose) return;
-                isDragging = true; startX = e.clientX; startY = e.clientY;
-                const rect = panel.getBoundingClientRect(); initialLeft = rect.left; initialTop = rect.top;
-            };
-            document.onmousemove = (e) => {
+            // 拖拽期间才挂载 move/up 监听，避免覆盖页面自身的 document 事件处理器
+            const onDragMove = (e) => {
                 if (!isDragging) return;
                 e.preventDefault();
                 panel.style.left = (initialLeft + e.clientX - startX) + 'px';
                 panel.style.top = (initialTop + e.clientY - startY) + 'px';
                 panel.style.right = 'auto';
             };
-            document.onmouseup = () => isDragging = false;
+            const onDragEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                document.removeEventListener('mousemove', onDragMove);
+                document.removeEventListener('mouseup', onDragEnd);
+            };
+            header.addEventListener('mousedown', (e) => {
+                if (e.target === btnClose) return;
+                isDragging = true; startX = e.clientX; startY = e.clientY;
+                const rect = panel.getBoundingClientRect(); initialLeft = rect.left; initialTop = rect.top;
+                document.addEventListener('mousemove', onDragMove);
+                document.addEventListener('mouseup', onDragEnd);
+            });
         },
 
         // --- 2. Core: 同步逻辑（API 直接获取） ---
@@ -3598,7 +5119,7 @@
                 }
 
             } catch (e) {
-                console.error("2.5 同步错误:", e);
+                Logger.error("2.5", "同步中断", e);
                 alert('同步中断: ' + e.message);
                 if (overlay) overlay.remove();
             }
@@ -3702,12 +5223,8 @@
 
                     if (countSpan && !countSpan.parentNode.querySelector('.gm-hist-tag')) {
                         const tag = document.createElement('span');
-                        tag.className = 'gm-hist-tag';
                         const isFull = last.stdCount >= last.limitCount;
-                        const bgColor = isFull ? '#fff0f0' : '#e6ffec';
-                        const textColor = isFull ? '#d32f2f' : '#1e7e34';
-
-                        tag.style.cssText = `font-size:12px; color:${textColor}; background:${bgColor}; padding:1px 5px; border-radius:3px; margin-left:8px; border:1px solid ${textColor}40;`;
+                        tag.className = `gm-hist-tag ${isFull ? 'gm-hist-tag--full' : 'gm-hist-tag--ok'}`;
                         tag.innerText = `记录:${last.stdCount}/${last.limitCount}`;
                         tag.title = `上次同步时间: ${last.time}`;
                         countSpan.parentNode.appendChild(tag);
@@ -3720,7 +5237,7 @@
         showOverlay(semesterName = '当前学期') {
             const div = document.createElement('div');
             div.id = 'gm-sync-overlay';
-            div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100000; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
+            div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
             div.innerHTML = `
             <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步课程数据...</div>
             <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">锁定抓取学期: ${semesterName}</div>
@@ -3799,7 +5316,7 @@
             if (semesterEl) {
                 currentSemester = semesterEl.innerText.trim();
             }
-        } catch (e) { console.warn("无法自动获取学期名称", e); }
+        } catch (e) { Logger.warn("2.6", "无法自动获取学期名称", e); }
 
         // --- 3. 获取表格容器 ---
         const scrollBodyTable = document.querySelector('.dataTables_scrollBody table#table');
@@ -3849,9 +5366,9 @@
                 if (FollowManager.has(storageId)) {
                     btn.title = '点击取消关注';
                     btn.style.color = '#f56c6c';
-                    btn.style.textShadow = '0 2px 5px rgba(245, 108, 108, 0.3)';
+                    btn.style.textShadow = 'none';
                     btn.style.opacity = '1';
-                    btn.style.transform = 'scale(1.1)';
+                    btn.style.transform = 'scale(1.08)';
                 } else {
                     btn.title = '点击关注课程';
                     btn.style.color = '#dcdfe6';
@@ -3898,10 +5415,11 @@
         // 初始执行一次
         injectFollowButtons();
 
-        // 使用 MutationObserver 监听表格变化（翻页、搜索时触发）
-        const observer = new MutationObserver((mutations) => {
-            // 简单的防抖，避免频繁触发
-            injectFollowButtons();
+        // 使用 MutationObserver 监听表格变化（翻页、搜索时触发，100ms 防抖合并连续变更）
+        let debounceTimer = null;
+        const observer = new MutationObserver(() => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(injectFollowButtons, 100);
         });
 
         const tableContainer = document.getElementById('e-content-area') || document.body;
@@ -3926,6 +5444,8 @@
             const TARGET_CELL_SELECTOR = "td div.el-progress";
             const UI_ELEMENT_CLASS = 'course-helper-ui-element';
             const HISTORY_STORAGE_KEY = CONSTANTS.HISTORY_STORAGE_KEY;
+            // 拦截 query-lesson 请求时强制放大的分页条数（fetch 与 XHR 通道统一取值）
+            const FORCED_PAGE_LIMIT = 100;
 
             let courseCodeToLessonIdMap = null;
 
@@ -3963,7 +5483,7 @@
                         courseCodeToLessonIdMap = new Map(data.data.lessons.map(lesson => [lesson.code, lesson.id]));
                     }
                 } catch (e) {
-                    console.error('[选课助手] 解析课程列表JSON时出错:', e);
+                    Logger.error('2.7', '解析课程列表JSON时出错', e);
                 }
                 // 数据准备好后，通知 UI 刷新
                 setTimeout(forceUpdateUI, 500);
@@ -3982,7 +5502,7 @@
                         );
                     }
                 } catch (e) {
-                    console.error('[选课助手] 解析已选课程列表JSON时出错:', e);
+                    Logger.error('2.7', '解析已选课程列表JSON时出错', e);
                 }
                 setTimeout(forceUpdateUI, 500);
             }
@@ -4000,7 +5520,7 @@
                         try {
                             const data = JSON.parse(config.body);
                             if (data.limit || data.pageSize) {
-                                const TARGET = 100; // 设定目标数量
+                                const TARGET = FORCED_PAGE_LIMIT;
                                 if (data.limit) data.limit = TARGET;
                                 if (data.pageSize) data.pageSize = TARGET;
                                 config.body = JSON.stringify(data);
@@ -4049,7 +5569,7 @@
                             let jsonData = JSON.parse(data);
                             // 强制修改 limit / pageSize
                             if (jsonData.hasOwnProperty('limit') || jsonData.hasOwnProperty('pageSize')) {
-                                const TARGET_LIMIT = 50;
+                                const TARGET_LIMIT = FORCED_PAGE_LIMIT;
 
                                 if (jsonData.limit) jsonData.limit = TARGET_LIMIT;
                                 if (jsonData.pageSize) jsonData.pageSize = TARGET_LIMIT;
@@ -4099,12 +5619,8 @@
                             if (existingElement) existingElement.remove();
                             if (releaseCount > 0) {
                                 const displayElement = document.createElement('div');
-                                displayElement.className = UI_ELEMENT_CLASS;
+                                displayElement.className = `${UI_ELEMENT_CLASS} gm-release-tag`;
                                 displayElement.textContent = `待释放保留人数: ${releaseCount}`;
-                                Object.assign(displayElement.style, {
-                                    color: '#E65100', fontWeight: 'bold', fontSize: '13px',
-                                    marginTop: '6px', textShadow: '0 0 5px rgba(255, 193, 7, 0.5)'
-                                });
                                 targetCell.parentElement.appendChild(displayElement);
                             }
                         }
@@ -4130,10 +5646,7 @@
                         const { stdCount, limitCount, time } = latestRecord;
                         const isFull = stdCount >= limitCount;
                         const displayElement = document.createElement('span');
-                        displayElement.className = `${UI_ELEMENT_CLASS} gm-hist-tag`;
-                        const bgColor = isFull ? '#fff0f0' : '#e6ffec';
-                        const textColor = isFull ? '#d32f2f' : '#1e7e34';
-                        displayElement.style.cssText = `display:block; width:fit-content; font-size:12px; color:${textColor}; background:${bgColor}; padding:1px 5px; border-radius:3px; margin:4px 0 0; border:1px solid ${textColor}40;`;
+                        displayElement.className = `${UI_ELEMENT_CLASS} gm-hist-tag ${isFull ? 'gm-hist-tag--full' : 'gm-hist-tag--ok'}`;
                         displayElement.textContent = `记录:${stdCount}/${limitCount}`;
                         displayElement.title = `上次同步时间: ${time}`;
                         targetContainer.appendChild(displayElement);
@@ -4263,12 +5776,12 @@
                                 // 已关注样式：深红、加粗、粉背景、内阴影
                                 btn.title = '点击取消关注';
                                 btn.style.color = '#f56c6c';
-                                btn.style.textShadow = '0 0 8px rgba(245, 108, 108, 0.4)';
-                                btn.style.transform = 'scale(1.2)';
+                                btn.style.textShadow = 'none';
+                                btn.style.transform = 'scale(1.08)';
                                 nameEl.style.fontWeight = 'bold';
-                                nameEl.style.color = '#d93025';
-                                row.style.backgroundColor = '#ffebeb';
-                                row.style.boxShadow = 'inset 5px 0 0 #f56c6c';
+                                nameEl.style.color = '#c53030';
+                                row.style.backgroundColor = '#fff1f2';
+                                row.style.boxShadow = 'inset 3px 0 0 #f56c6c';
                             } else {
                                 // 未关注样式：浅灰
                                 btn.title = '点击关注课程';
@@ -4326,7 +5839,7 @@
                                 } catch (e) { }
 
                                 FollowManager.add(lessonId, {
-                                    id: lessonId, code: courseCode, name: nameEl.innerText.replace('❤', '').trim(),
+                                    id: lessonId, code: courseCode, name: nameEl.innerText.trim(),
                                     teachers, credits, timeAndPlace, semester: targetSemester, addedTime: new Date().toLocaleString()
                                 });
                                 showToast(`已关注 ${courseCode}`, 'success');
@@ -4376,6 +5889,85 @@
         })();
     }
 
+    // =-=-=-=-=-=-=-=-=-=-=-=-= 2.8 教务系统静默登录（CAS SSO） =-=-=-=-=-=-=-=-=-=-=-=-=
+    // 门户与教务同属统一身份认证，门户会话有效时访问 /student/sso-login 可无感换票；
+    // 直接访问受保护页面只会落到教务自己的 /student/login，并不会触发 CAS。
+    const JwxtSso = {
+        AUTH_ENTRY: 'https://jwxt.nwpu.edu.cn/student/sso-login',
+        AUTH_FRAME_ID: 'gm_jwxt_sso_frame',
+        _sessionPromise: null,
+
+        // 轻量探测：course-table 需要登录，未登录时返回登录页 HTML，不含 dataId
+        probe() {
+            return new Promise(resolve => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: 'https://jwxt.nwpu.edu.cn/student/for-std/course-table',
+                    timeout: 6000,
+                    onload: res => resolve(res.status === 200 && /var\s+dataId\s*=\s*(\d+)\s*;/.test(res.responseText || '')),
+                    onerror: () => resolve(false),
+                    ontimeout: () => resolve(false)
+                });
+            });
+        },
+
+        preflight(timeout = 8000) {
+            return new Promise(resolve => {
+                const old = document.getElementById(this.AUTH_FRAME_ID);
+                if (old) old.remove();
+
+                const frame = document.createElement('iframe');
+                frame.id = this.AUTH_FRAME_ID;
+                frame.style.cssText = 'position: fixed; top: 0; left: -15000px; width: 1280px; height: 800px; border: none; visibility: visible; z-index: -100;';
+
+                let settled = false;
+                let debounce = null;
+                const done = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(debounce);
+                    clearTimeout(cap);
+                    setTimeout(() => { if (frame.parentNode) frame.remove(); }, 1500);
+                    resolve();
+                };
+                const cap = setTimeout(done, timeout);
+                // CAS 换票会连续触发多次 load，等最后一次 load 后再留 800ms 给 Cookie 落盘
+                frame.addEventListener('load', () => {
+                    clearTimeout(debounce);
+                    debounce = setTimeout(done, 800);
+                });
+
+                frame.src = this.AUTH_ENTRY;
+                document.body.appendChild(frame);
+            });
+        },
+
+        // 返回 true 表示教务会话可用；在教务页面内天然可用，无需预检
+        async ensureSession() {
+            if (location.host === 'jwxt.nwpu.edu.cn') return true;
+            if (this._sessionPromise) return this._sessionPromise;
+
+            this._sessionPromise = (async () => {
+                Logger.log("2.8", "开始探测教务会话...");
+                const first = await this.probe();
+                Logger.log("2.8", "教务会话探测结果: " + first);
+                if (first) return true;
+
+                Logger.log("2.8", "开始统一认证静默预检...");
+                await this.preflight();
+                // GM 探测可能因 WAF 挑战误判，预检完成后交给 Worker 的真实请求判定；
+                // 若仍未登录，Worker 会回传 AUTH_REQUIRED 再提示用户
+                const second = await this.probe();
+                Logger.log("2.8", "预检后会话探测结果: " + second);
+                return true;
+            })().then(ok => {
+                if (!ok) this._sessionPromise = null;
+                return ok;
+            });
+            return this._sessionPromise;
+        }
+    };
+
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.8 后台静默数据同步 =-=-=-=-=-=-=-=-=-=-=-=-=
     const BackgroundSyncSystem = {
         WORKER_NAME: 'gm_bg_sync_worker_frame',
@@ -4404,7 +5996,7 @@
             }
         },
 
-        // 主控逻辑
+        // 主控逻辑（登录失效时静默跳过，不弹窗打扰）
         async initController() {
             // 旧版字段映射错误的数据迁移
             // 检测到异常数据则清除后台同步缓存并重置时间戳，触发本次页面立即重新同步
@@ -4420,10 +6012,31 @@
                 return;
             }
 
-            Logger.log("2.8", "准备创建后台 Iframe...");
+            if (isBackgroundSyncing) {
+                Logger.log("2.8", "已有后台同步任务进行中，跳过本次触发");
+                return;
+            }
+
+            Logger.log("2.8", "检查教务登录状态...");
             isBackgroundSyncing = true;
             updateMenuButtonsState(isDataReady);
 
+            // 门户页面与教务是跨域站点，直接请求受保护页面只会落到教务自己的登录页；
+            // 先走 /student/sso-login 利用统一认证会话无感换票
+            let authOk = false;
+            try {
+                authOk = await JwxtSso.ensureSession();
+            } catch (e) {
+                Logger.error("2.8", "教务登录预检失败", e);
+            }
+            if (!authOk) {
+                isBackgroundSyncing = false;
+                updateMenuButtonsState(isDataReady);
+                Logger.log("2.8", "教务登录已失效，静默跳过本次后台同步");
+                return;
+            }
+
+            Logger.log("2.8", "准备创建后台 Iframe...");
             const oldFrame = document.getElementById('gm_bg_sync_frame');
             if (oldFrame) oldFrame.remove();
 
@@ -4437,25 +6050,50 @@
             iframe.style.cssText = `position: fixed; top: 0; left: -15000px; width: 1440px; height: 900px; border: none; visibility: visible; z-index: -100;`;
             document.body.appendChild(iframe);
 
+            let watchDog = null;
+            const cleanup = (delay = 0) => {
+                isBackgroundSyncing = false;
+                updateMenuButtonsState(isDataReady);
+                if (watchDog) clearTimeout(watchDog);
+                window.removeEventListener('message', messageHandler);
+                setTimeout(() => {
+                    const frame = document.getElementById('gm_bg_sync_frame');
+                    if (frame) frame.remove();
+                }, delay);
+            };
+
             const messageHandler = (event) => {
-                if (event.data && event.data.type === 'GM_BG_SYNC_COMPLETE') {
+                if (!event.data) return;
+                if (event.data.type === 'GM_BG_SYNC_AUTH_REQUIRED') {
+                    Logger.log("2.8", "教务会话已失效，后台同步静默中止");
+                    JwxtSso._sessionPromise = null;
+                    cleanup(0);
+                    return;
+                }
+                if (event.data.type === 'GM_BG_SYNC_COMPLETE') {
                     Logger.log("2.8", `后台同步完成。抓取: ${event.data.count}`);
                     if (event.data.count > 0) GM_setValue(CONSTANTS.LAST_SYNC_TIME_KEY, Date.now());
-                    isBackgroundSyncing = false;
-                    updateMenuButtonsState(isDataReady);
-                    setTimeout(() => {
-                        const frame = document.getElementById('gm_bg_sync_frame');
-                        if (frame) frame.remove();
-                    }, 2000);
-                    window.removeEventListener('message', messageHandler);
+                    cleanup(2000);
                 }
             };
             window.addEventListener('message', messageHandler);
+
+            watchDog = setTimeout(() => {
+                Logger.log("2.8", "后台同步超时（90秒），已中止");
+                cleanup(0);
+            }, 90000);
         },
 
         // Worker 逻辑（API 直接获取）
         startWorker() {
             Logger.info("Sync-Worker", "启动");
+
+            // 未登录时 iframe 会落到 /student/login 或 sso-login，这里不再继续请求接口
+            if (!location.pathname.includes('/student/for-std/lesson-search')) {
+                Logger.log("Sync-Worker", "当前不在开课查询页，判定为教务登录失效: " + location.pathname);
+                window.top.postMessage({ type: 'GM_BG_SYNC_AUTH_REQUIRED' }, '*');
+                return;
+            }
 
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
             const API_BASE = '/student/for-std/lesson-search/semester';
@@ -4566,7 +6204,10 @@
                     }
 
                     if (semesterOptions.length === 0) {
-                        throw new Error('未找到任何学期选项');
+                        // 登录页 / WAF 挑战页都没有 #semester，按登录失效处理
+                        const authErr = new Error('未找到任何学期选项');
+                        authErr.authRequired = true;
+                        throw authErr;
                     }
 
                     // ================== 1. 通过API寻找最新有数据的学期 ==================
@@ -4629,8 +6270,12 @@
                     window.top.postMessage({ type: 'GM_BG_SYNC_COMPLETE', count: allCourseData.length }, '*');
 
                 } catch (err) {
-                    console.error('[Worker] 异常:', err);
-                    window.top.postMessage({ type: 'GM_BG_SYNC_COMPLETE', count: 0 }, '*');
+                    Logger.error("2.8", "后台同步 Worker 异常", err);
+                    if (err && err.authRequired) {
+                        window.top.postMessage({ type: 'GM_BG_SYNC_AUTH_REQUIRED' }, '*');
+                    } else {
+                        window.top.postMessage({ type: 'GM_BG_SYNC_COMPLETE', count: 0 }, '*');
+                    }
                 }
             };
 
@@ -4644,10 +6289,10 @@
         if (!ConfigManager.enableCourseWatch) {
             return;
         }
-        console.log("[NWPU-Enhanced] 初始化培养方案课程预览");
+        Logger.log('2.9', "初始化培养方案课程预览");
 
         // 1. 数据准备
-        const bgDataStr = GM_getValue('jwxt_background_sync_data'); // 使用硬编码Key
+        const bgDataStr = GM_getValue(CONSTANTS.BACKGROUND_SYNC_KEY);
         if (!bgDataStr) return;
 
         let courseDB;
@@ -4666,41 +6311,42 @@
 
         // 定义高清 SVG 图标
         const svgs = {
-            book: `<svg viewBox="0 0 1024 1024" width="18" height="18" style="vertical-align:-4px;fill:#409EFF"><path d="M832 160H256c-52.9 0-96 43.1-96 96v576c0 52.9 43.1 96 96 96h576c17.7 0 32-14.3 32-32V192c0-17.7-14.3-32-32-32zm-40 640H256c-17.7 0-32-14.3-32-32s14.3-32 32-32h536v64zM256 224h536v320H256V224z"></path></svg>`,
-            user: `<svg viewBox="0 0 1024 1024" width="14" height="14" style="fill:#909399;margin-right:6px;"><path d="M512 512c141.4 0 256-114.6 256-256S653.4 0 512 0 256 114.6 256 256s114.6 256 256 256zm0 64c-170.7 0-512 85.3-512 256v64c0 17.7 14.3 32 32 32h960c17.7 0 32-14.3 32-32v-64c0-170.7-341.3-256-512-256z"></path></svg>`,
-            pin: `<svg viewBox="0 0 1024 1024" width="14" height="14" style="fill:#909399;margin-right:6px;"><path d="M512 0C323.8 0 170.7 153.1 170.7 341.3c0 176.3 194.2 460.5 285.4 584.2 24.3 32.9 73.5 32.9 97.8 0 91.2-123.7 285.4-407.9 285.4-584.2C853.3 153.1 700.2 0 512 0zm0 512c-94.3 0-170.7-76.4-170.7-170.7S417.7 170.7 512 170.7 682.7 247.1 682.7 341.3 606.3 512 512 512z"></path></svg>`
+            book: `<svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#409EFF;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-4px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
+            user: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:6px;flex:none;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+            pin: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:6px;flex:none;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`
         };
 
         // 2. 注入美化后的 CSS
         if (!document.getElementById('gm-program-tooltip-style')) {
             const style = getOrCreateStyleEl('gm-program-tooltip-style');
             style.textContent = `
-            /* 课程代码高亮样式 */
+            /* 课程代码高亮样式：全包围虚线 */
             .gm-course-code-highlight {
-                border-bottom: 2px dashed #409EFF;
-                color: #409EFF;
+                border: 1.5px dashed var(--gm-primary);
+                color: var(--gm-primary-text);
                 font-weight: 600;
+                font-size: 13px;
                 cursor: pointer;
-                background-color: rgba(64, 158, 255, 0.08);
-                padding: 1px 4px;
-                border-radius: 4px;
+                background-color: var(--gm-primary-light);
+                padding: 2px 6px;
+                border-radius: var(--gm-radius-sm);
                 transition: all 0.2s;
             }
             .gm-course-code-highlight:hover {
-                background-color: rgba(64, 158, 255, 0.2);
-                color: #0056b3;
+                background-color: var(--gm-primary-border);
+                color: var(--gm-primary-active);
+                border-color: var(--gm-primary-active);
             }
 
             /* 弹窗容器 - 磨砂玻璃质感 */
             .gm-program-tooltip {
                 position: fixed; z-index: 100001;
-                background: rgba(255, 255, 255, 0.98);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(0,0,0,0.06);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-                border-radius: 12px; padding: 0;
+                background: #fff;
+                border: 1px solid var(--gm-border);
+                box-shadow: var(--gm-shadow-lg);
+                border-radius: var(--gm-radius-lg); padding: 0;
                 width: 440px;
-                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+                font-family: var(--gm-font);
                 display: none; opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
                 pointer-events: auto;
                 transform: translateY(5px);
@@ -4709,18 +6355,20 @@
 
             /* 头部样式 */
             .gm-pt-header {
-                background: linear-gradient(to right, #f9fafc, #ffffff);
-                padding: 14px 20px;
-                border-bottom: 1px solid #ebeef5;
-                font-weight: 700; color: #303133; font-size: 15px;
+                background: var(--gm-fill);
+                padding: 14px 18px;
+                border-bottom: 1px solid var(--gm-border);
+                font-weight: 700; color: var(--gm-text-1); font-size: 14px;
                 display:flex; justify-content:space-between; align-items: center;
-                border-radius: 12px 12px 0 0;
-                letter-spacing: 0.5px;
+                border-radius: var(--gm-radius-lg) var(--gm-radius-lg) 0 0;
+                letter-spacing: 0;
             }
             .gm-pt-badge {
-                font-weight:normal; color:#409EFF; font-size:12px;
-                background:rgba(64, 158, 255, 0.1);
-                padding:4px 10px; border-radius:20px;
+                font-weight: 600; color: var(--gm-primary-text); font-size: 11.5px;
+                background: var(--gm-primary-light);
+                border: 1px solid var(--gm-primary-border);
+                padding: 2px 8px; border-radius: var(--gm-radius-sm);
+                white-space: nowrap;
             }
 
             /* 列表区域 */
@@ -4729,7 +6377,7 @@
             /* 滚动条美化 */
             .gm-pt-list::-webkit-scrollbar { width: 6px; }
             .gm-pt-list::-webkit-scrollbar-track { background: transparent; }
-            .gm-pt-list::-webkit-scrollbar-thumb { background-color: #dcdfe6; border-radius: 3px; }
+            .gm-pt-list::-webkit-scrollbar-thumb { background-color: var(--gm-border); border-radius: 3px; }
 
             /* 单个课程卡片 */
             .gm-pt-item {
@@ -4738,7 +6386,7 @@
                 transition: background-color 0.2s;
             }
             .gm-pt-item:last-child { border-bottom: none; }
-            .gm-pt-item:hover { background-color: #f0f7ff; }
+            .gm-pt-item:hover { background-color: var(--gm-primary-light); }
 
             /* 标题行：课程名 + 人数标签 */
             .gm-pt-title-row {
@@ -4746,7 +6394,7 @@
                 margin-bottom: 4px;
             }
             .gm-pt-title {
-                font-weight: 600; font-size: 15px; color: #303133;
+                font-weight: 700; font-size: 14px; color: var(--gm-text-1);
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                 flex: 1; min-width: 0; padding-right: 10px;
             }
@@ -4756,19 +6404,22 @@
                 display: flex; justify-content: space-between; align-items: center;
                 margin-bottom: 8px;
             }
-            .gm-pt-code { font-size: 12px; color: #909399; font-family: Consolas, monospace; }
+            .gm-pt-code { font-size: 13.5px; font-weight: 600; color: var(--gm-text-3); font-family: var(--gm-mono); }
 
             /* 元信息区：教师、地点 */
-            .gm-pt-meta { display: flex; flex-direction: column; gap: 4px; color: #606266; font-size: 13px; }
+            .gm-pt-meta { display: flex; flex-direction: column; gap: 5px; color: var(--gm-text-2); font-size: 12.5px; line-height: 1.55; }
             .gm-pt-row { display: flex; align-items: center; }
+            .gm-pt-row--place { align-items: flex-start; }
+            .gm-pt-row--place svg { margin-top: 2px; }
 
-            /* 人数胶囊标签 */
+            /* 人数标签：与界面同一字体，数字等宽对齐 */
             .gm-pt-stat {
-                font-family: Consolas, monospace; font-size: 13px; font-weight: bold;
-                padding: 3px 8px; border-radius: 4px; flex-shrink: 0;
+                font-family: var(--gm-font); font-size: 12.5px; font-weight: 700;
+                font-variant-numeric: tabular-nums;
+                padding: 2px 7px; border-radius: var(--gm-radius-sm); flex-shrink: 0;
             }
-            .gm-tag-full { color: #F56C6C; background: #fef0f0; border: 1px solid #fde2e2; }
-            .gm-tag-avail { color: #67C23A; background: #f0f9eb; border: 1px solid #e1f3d8; }
+            .gm-tag-full { color: var(--gm-danger-text); background: var(--gm-danger-bg); border: 1px solid var(--gm-danger-border); }
+            .gm-tag-avail { color: var(--gm-success-text); background: var(--gm-success-bg); border: 1px solid var(--gm-success-border); }
 
             /* 关注按钮 */
             .gm-pt-btn {
@@ -4777,8 +6428,8 @@
                 display: flex; align-items: center; justify-content: center;
                 width: 32px; height: 32px; border-radius: 50%;
             }
-            .gm-pt-btn:hover { transform: scale(1.15); background-color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            .gm-pt-btn.is-active { color: #f56c6c !important; text-shadow: 0 2px 5px rgba(245, 108, 108, 0.3); }
+            .gm-pt-btn:hover { transform: scale(1.08); background-color: #fff; box-shadow: var(--gm-shadow-sm); }
+            .gm-pt-btn.is-active { color: #f56c6c !important; text-shadow: none; }
         `;
             document.head.appendChild(style);
         }
@@ -4833,7 +6484,7 @@
                         e.target.style.transition = originalTransition;
                     }, 800);
                 }).catch(err => {
-                    console.error('复制失败:', err);
+                    Logger.error('2.9', '复制失败', err);
                     alert('复制失败，请手动复制');
                 });
 
@@ -4923,25 +6574,32 @@
                             || placeText?.dateTimePlacePersonText?.textZh
                             || '详见课表';
                     }
+                    const teacherHtml = esc(teacherText);
+                    // 分号分隔多个时间段，逐段换行显示
+                    const placeHtml = String(placeText)
+                        .split(/[;；]/)
+                        .map(s => esc(s.trim()))
+                        .filter(Boolean)
+                        .join('<br>');
 
                     contentHTML += `
                     <div class="gm-pt-item">
                         <div class="gm-pt-title-row">
-                            <div class="gm-pt-title" title="${c.name}">${c.name}</div>
+                            <div class="gm-pt-title" title="${esc(c.name)}">${esc(c.name)}</div>
                             <div class="gm-pt-stat ${countClass}">${c.stdCount}/${c.limitCount}</div>
                         </div>
                         <div class="gm-pt-code-row">
-                            <div class="gm-pt-code">${c.code}</div>
+                            <div class="gm-pt-code">${esc(c.code)}</div>
                             <div class="gm-pt-btn ${activeClass}" style="color:${initColor}"
-                                 data-id="${c.id}" data-code="${c.code}" data-name="${c.name}"
-                                 data-teachers="${teacherText}" data-place="${placeText}"
-                                 data-credits="${c.credits || ''}"
-                                 data-semester="${c.semester}"
+                                 data-id="${c.id}" data-code="${esc(c.code)}" data-name="${esc(c.name)}"
+                                 data-teachers="${teacherHtml}" data-place="${esc(placeText)}"
+                                 data-credits="${esc(c.credits || '')}"
+                                 data-semester="${esc(c.semester || '')}"
                                  title="${isFollowed ? '取消关注' : '关注此班级'}"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
                         </div>
                         <div class="gm-pt-meta">
-                            <div class="gm-pt-row">${svgs.user} <span>${teacherText}</span></div>
-                            <div class="gm-pt-row">${svgs.pin} <span>${placeText}</span></div>
+                            <div class="gm-pt-row">${svgs.user} <span>${teacherHtml}</span></div>
+                            <div class="gm-pt-row gm-pt-row--place">${svgs.pin} <span>${placeHtml}</span></div>
                         </div>
                     </div>
                 `;
@@ -4951,7 +6609,7 @@
 
             tooltip.innerHTML = `
             <div class="gm-pt-header">
-                <span style="display:flex;align-items:center;gap:8px">${svgs.book} <span style="font-family:Consolas, monospace;font-size:16px;">${code}</span></span>
+                <span style="display:flex;align-items:center;gap:8px">${svgs.book} <span style="font-family:var(--gm-mono);font-size:17px;font-weight:700;">${esc(code)}</span></span>
                 <span class="gm-pt-badge">本学期 ${courses.length} 个班级</span>
             </div>
             ${contentHTML}
@@ -4993,39 +6651,183 @@
     }
 
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.10 选课时间提醒 =-=-=-=-=-=-=-=-=-=-=-=-=
-    function initScheduleWidget() {
-        // ================= 配置区域 (维护请修改此处) =================
-        const SCHEDULE_CONFIG = {
-            // 插件整体失效时间 (超过此时间不再显示)
-            EXPIRATION_DATE: '2026-09-11T00:00:00',
-            // 本地存储Key (用于不再提醒)
-            STORAGE_KEY: 'jwxt_schedule_table_closed_2026_autumn',
-            // 选课地址
-            COURSE_URL: 'https://jwxt.nwpu.edu.cn/student/for-std/course-select',
-            // 提前N小时提示同步数据
-            PRE_NOTIFY_HOURS: 16,
+    // 时间表放在仓库 schedule.json 中，按身份和学期维护；脚本运行时拉取并缓存 1 小时
+    const SCHEDULE_CONFIG_URLS = [
+        'https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/schedule.json',
+        'https://raw.githubusercontent.com/zengzoxiong/aoxiang-jwxt-enhance/main/schedule.json'
+    ];
+    const SCHEDULE_CACHE_TTL = 60 * 60 * 1000;
 
-            // 选课阶段配置 (支持自动生成表格)
-            // type: 'positive' (正选) | 'makeup' (补选/其他) -> 用于判断是否触发考前数据同步提示
-            GROUPS: [
-                {
-                    groupName: '正选', // 表格第一列名称
-                    phases: [
-                        { name: '第一轮', type: 'positive', start: '2026-08-18T09:00:00', end: '2026-08-21T12:00:00', method: '意愿值选课', scope: '主修专业课' },
-                        { name: '第二轮', type: 'positive', start: '2026-08-24T09:00:00', end: '2026-08-26T12:00:00', method: '意愿值选课', scope: '学期教学计划全部课程' },
-                        { name: '第三轮', type: 'positive', start: '2026-08-27T13:00:00', end: '2026-08-28T13:00:00', method: '直选选课', scope: '学期教学计划全部课程' }
-                    ]
+    function gmGetText(url, timeout = 8000) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                timeout,
+                onload: res => {
+                    if (res.status >= 200 && res.status < 300) resolve(res.responseText || '');
+                    else reject(new Error('HTTP ' + res.status));
                 },
-                {
-                    groupName: '补选',
-                    phases: [
-                        { name: '补选阶段', type: 'makeup', start: '2026-08-31T09:00:00', end: '2026-09-04T12:00:00', method: '系统中申请', scope: '学期开设的全部课程' },
-                        { name: '本研共选', type: 'makeup', start: '2026-09-08T09:00:00', end: '2026-09-10T12:00:00', method: '直选选课', scope: '学期开设的本研共选课程' }
-                    ]
+                onerror: () => reject(new Error('网络请求失败')),
+                ontimeout: () => reject(new Error('请求超时'))
+            });
+        });
+    }
+
+    function getScheduleRange(schedule) {
+        let start = Infinity;
+        let end = -Infinity;
+        (schedule && schedule.groups ? schedule.groups : []).forEach(group => {
+            (group.phases || []).forEach(phase => {
+                const s = new Date(phase.start).getTime();
+                const e = new Date(phase.end).getTime();
+                if (!isNaN(s)) start = Math.min(start, s);
+                if (!isNaN(e)) end = Math.max(end, e);
+            });
+        });
+        return { start, end };
+    }
+
+    function normalizeSchedule(schedule) {
+        if (!schedule || !Array.isArray(schedule.groups)) return schedule;
+        const range = getScheduleRange(schedule);
+        if (!schedule.expires && isFinite(range.end)) {
+            schedule.expires = new Date(range.end + 7 * 24 * 3600 * 1000).toISOString();
+        }
+        return schedule;
+    }
+
+    async function loadScheduleConfig() {
+        let cache = null;
+        try { cache = JSON.parse(GM_getValue(CONSTANTS.SCHEDULE_CACHE_KEY, 'null')); } catch (e) { cache = null; }
+
+        if (cache && cache.data && Array.isArray(cache.data.schedules) && Date.now() - cache.fetchedAt < SCHEDULE_CACHE_TTL) {
+            cache.data.__source = 'cache';
+            return cache.data;
+        }
+
+        for (const url of SCHEDULE_CONFIG_URLS) {
+            try {
+                const text = (await gmGetText(url)).replace(/^\uFEFF/, '');
+                const data = JSON.parse(text);
+                if (data && Array.isArray(data.schedules)) {
+                    data.schedules.forEach(normalizeSchedule);
+                    GM_setValue(CONSTANTS.SCHEDULE_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), data }));
+                    data.__source = url.includes('gitee') ? 'gitee' : 'github';
+                    return data;
                 }
-            ]
+                Logger.warn('2.10', '选课时间表格式不正确: ' + url);
+            } catch (e) {
+                Logger.warn('2.10', '选课时间表加载失败: ' + url + ' ' + (e && e.message));
+            }
+        }
+
+        if (cache && cache.data && Array.isArray(cache.data.schedules)) {
+            cache.data.__source = 'stale-cache';
+            return cache.data;
+        }
+        Logger.error('2.10', '选课时间表不可用，已跳过选课提醒');
+        return { schedules: [], __source: 'none' };
+    }
+
+    async function detectUserIdentity() {
+        const stored = GM_getValue(CONSTANTS.USER_IDENTITY_KEY, '');
+        if (stored === 'graduate' || stored === 'undergraduate') {
+            Logger.log('2.10', '使用已同步身份: ' + (stored === 'graduate' ? '研究生' : '本科生'));
+            return stored;
+        }
+
+        // 1. 页面用户信息区域
+        const selectors = ['.user-info', '.user-name', '.student-info', '.avatar-wrapper', '.user-detail', '.header', '.el-header'];
+        const headerText = selectors.map(sel => {
+            const el = document.querySelector(sel);
+            return el ? (el.innerText || '') : '';
+        }).join(' ');
+        if (/研究生/.test(headerText)) {
+            GM_setValue(CONSTANTS.USER_IDENTITY_KEY, 'graduate');
+            return 'graduate';
+        }
+        if (/本科生/.test(headerText)) {
+            GM_setValue(CONSTANTS.USER_IDENTITY_KEY, 'undergraduate');
+            return 'undergraduate';
+        }
+
+        // 2. 画像页当前身份 tab（tab-6 研究生 / tab-1 主修）
+        const activeTab = document.querySelector('.el-tabs__item.is-active');
+        if (activeTab && activeTab.id === 'tab-6') {
+            GM_setValue(CONSTANTS.USER_IDENTITY_KEY, 'graduate');
+            return 'graduate';
+        }
+        if (activeTab && activeTab.id === 'tab-1') {
+            GM_setValue(CONSTANTS.USER_IDENTITY_KEY, 'undergraduate');
+            return 'undergraduate';
+        }
+
+        // 3. getStdInfo 探测（研究生 / 本科生各请求一次）
+        const detectFromText = (text) => {
+            if (!text) return '';
+            if (/研究生/.test(text)) return 'graduate';
+            if (/本科生/.test(text)) return 'undergraduate';
+            try {
+                const str = JSON.stringify(JSON.parse(text));
+                if (/研究生/.test(str)) return 'graduate';
+                if (/本科生/.test(str)) return 'undergraduate';
+            } catch (e) { /* ignore */ }
+            return '';
         };
-        // ===========================================================
+        for (const assoc of [6, 1]) {
+            try {
+                const text = await gmGetText(`https://jwxt.nwpu.edu.cn/student/for-std/student-portrait/getStdInfo?bizTypeAssoc=2&cultivateTypeAssoc=${assoc}`, 5000);
+                const identity = detectFromText(text);
+                if (identity) {
+                    GM_setValue(CONSTANTS.USER_IDENTITY_KEY, identity);
+                    return identity;
+                }
+            } catch (e) { /* 探测失败按下一个 */ }
+        }
+
+        Logger.log('2.10', '未识别到身份，按本科生处理');
+        GM_setValue(CONSTANTS.USER_IDENTITY_KEY, 'undergraduate');
+        return 'undergraduate';
+    }
+
+    function pickSchedule(data, identity) {
+        const list = (data.schedules || []).filter(s => s && s.identity === identity && Array.isArray(s.groups) && s.groups.length);
+        if (!list.length) return null;
+
+        const now = Date.now();
+        const scored = list.map(schedule => ({ schedule, ...getScheduleRange(schedule) }))
+            .filter(x => isFinite(x.start) && isFinite(x.end));
+        if (!scored.length) return list[0];
+
+        const active = scored.find(x => now >= x.start - 16 * 3600 * 1000 && now <= x.end);
+        if (active) return active.schedule;
+
+        const upcoming = scored.filter(x => x.start > now).sort((a, b) => a.start - b.start)[0];
+        if (upcoming) return upcoming.schedule;
+
+        const past = scored.filter(x => x.end < now).sort((a, b) => b.end - a.end)[0];
+        return (past || scored[0]).schedule;
+    }
+
+    async function initScheduleWidget() {
+        const remote = await loadScheduleConfig();
+        const identity = await detectUserIdentity();
+        const identityName = identity === 'graduate' ? '研究生' : '本科生';
+        const schedule = pickSchedule(remote, identity);
+        if (!schedule) {
+            Logger.log('2.10', `未找到${identityName}的选课时间配置，已跳过选课提醒`);
+            return;
+        }
+
+        const SCHEDULE_CONFIG = {
+            EXPIRATION_DATE: schedule.expires || '',
+            STORAGE_KEY: schedule.storageKey || `jwxt_schedule_table_closed_${schedule.term || 'term'}_${identity}`,
+            COURSE_URL: schedule.courseUrl || remote.courseUrl || 'https://jwxt.nwpu.edu.cn/student/for-std/course-select',
+            PRE_NOTIFY_HOURS: Number(schedule.preNotifyHours ?? remote.preNotifyHours ?? 16),
+            GROUPS: schedule.groups
+        };
+        Logger.log('2.10', `选课提醒身份: ${identityName}，时间表: ${schedule.term || '未标注'}（来源: ${remote.__source || 'json'}）`);
 
         const showWidget = () => {
             if (GM_getValue(SCHEDULE_CONFIG.STORAGE_KEY, false) === true) return;
@@ -5035,7 +6837,7 @@
             const now = Date.now();
             const expirationTime = new Date(SCHEDULE_CONFIG.EXPIRATION_DATE).getTime();
 
-            if (now > expirationTime) return;
+            if (isNaN(expirationTime) || now > expirationTime) return;
             if (document.querySelector('.gm-schedule-box')) return;
 
             // --- 1. 计算当前状态 & 构建表格行 ---
@@ -5061,7 +6863,7 @@
                     else if (!activePhaseFound && phase.type === 'positive' && now >= preStartTime && now < startTime) {
                         const hoursLeft = Math.ceil((startTime - now) / 3600000);
                         statusHtml = `<span style="color: #E65100; font-weight:bold;">${group.groupName}${phase.name}</span> 将于 ${hoursLeft} 小时后开始。` +
-                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:bold; margin-left:10px;">[建议您点击此处记录课程内置情况]</span>`;
+                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:bold; margin-left:10px;">[建议提前点击此处同步课程余量数据]</span>`;
                         showPreSyncLink = true;
                         activePhaseFound = true;
                     }
@@ -5144,6 +6946,7 @@
             div.innerHTML = `
             <div style="font-weight:bold; font-size:14px; margin-bottom:8px; color:#303133; text-align:center;">
                 选课时间安排表
+                <span style="font-size:11.5px; font-weight:600; color:var(--gm-primary-text); background:var(--gm-primary-light); border:1px solid var(--gm-primary-border); padding:1px 6px; border-radius:6px; margin-left:6px; vertical-align:1px;">${identityName}</span>
             </div>
             <div class="gm-status-bar">${statusHtml}</div>
             <table class="gm-sch-table">
@@ -5667,7 +7470,7 @@
                         }
 
                     } catch (e) {
-                        console.error(e);
+                        Logger.error('2.11', '评教任务执行异常', e);
                         statusEl.className = 'gm-status-error';
                         statusEl.innerText = '失败';
                         const backBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('取消') || b.innerText.includes('返回'));
@@ -5973,7 +7776,10 @@
             if (location.host !== 'ecampus.nwpu.edu.cn') return;
             const checkAndSave = () => {
                 const token = localStorage.getItem('token');
-                if (token) GM_setValue(this.STORAGE_KEY, token);
+                if (token) {
+                    GM_setValue(this.STORAGE_KEY, token);
+                    syncIdentityFromToken(token);
+                }
             };
             checkAndSave();
             setTimeout(checkAndSave, 500);
@@ -6303,12 +8109,12 @@
                 html += `
                 <div class="gm-ps-list-item" data-idx="${actualIdx}">
                     <div class="gm-ps-item-name">
-                        <span>${name}</span>
+                        <span>${esc(name)}</span>
                         ${tagHtml}
                     </div>
-                    <div class="gm-ps-item-id">ID: ${id}</div>
+                    <div class="gm-ps-item-id">ID: ${esc(id)}</div>
                     <div style="font-size:13px; color:#a8abb2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${dept}
+                        ${esc(dept)}
                     </div>
                 </div>
             `;
@@ -6640,7 +8446,7 @@
                     currentCourse = tb.courseName;
                     const courseUrl = `https://jwxt.nwpu.edu.cn/student/for-std/lesson-search/info/${tb.courseId}`;
                     rowsHtml += `<td rowspan="${courseCountMap[currentCourse]}" class="gm-textbook-course">
-                                <a href="${courseUrl}" target="_blank" title="查看课程详情">${tb.courseName}</a>
+                                <a href="${courseUrl}" target="_blank" title="查看课程详情">${esc(tb.courseName)}</a>
                              </td>`;
                 }
 
@@ -6652,24 +8458,24 @@
 
                     const platformDisplay = tb.platformName || "在线平台";
                     const linkHtml = targetUrl
-                        ? `<a href="${targetUrl}" target="_blank" class="gm-online-btn">跳转至 ${platformDisplay}</a>`
+                        ? `<a href="${targetUrl}" target="_blank" class="gm-online-btn">跳转至 ${esc(platformDisplay)}</a>`
                         : `<span style="margin-left:10px; color:#999; font-size:12px;">(暂无跳转链接)</span>`;
 
                     rowsHtml += `
                     <td colspan="6" class="gm-online-cell">
                         <span style="margin-right:8px;"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:3px;" stroke="#909399" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>在线开放课程</span>
-                        <span>平台：${platformDisplay}</span>
+                        <span>平台：${esc(platformDisplay)}</span>
                         ${linkHtml}
                     </td>
                 </tr>`;
                 } else {
                     rowsHtml += `
-                    <td>${tb.name}</td>
-                    <td>${tb.author}</td>
-                    <td>${tb.publisher}</td>
-                    <td>${tb.isbn}</td>
-                    <td>${tb.edition}</td>
-                    <td>${tb.pubDate}</td>
+                    <td>${esc(tb.name)}</td>
+                    <td>${esc(tb.author)}</td>
+                    <td>${esc(tb.publisher)}</td>
+                    <td>${esc(tb.isbn)}</td>
+                    <td>${esc(tb.edition)}</td>
+                    <td>${esc(tb.pubDate)}</td>
                 </tr>`;
                 }
             });
@@ -6702,7 +8508,7 @@
     // 教材模块【阶段1】：必须在页面自身 XHR 发出前挂载拦截器，故在加载期执行（内部防重复）
     try {
         TextbookInfoModule.installHook();
-    } catch (e) { console.error(e); }
+    } catch (e) { Logger.error('2.13', '教材拦截器挂载失败', e); }
 
     // --- 3. 脚本主入口（路由分发，全部页面初始化的唯一入口） ---
 
@@ -6715,15 +8521,16 @@
             return;
         }
 
-        if (window.frameElement && window.frameElement.id === 'gm-id-fetcher-patch') {
-            return;
-        }
-
         // 门户(ecampus) 挂载与同步
         if (location.host === 'ecampus.nwpu.edu.cn') {
             PersonnelSearch.syncToken();
             if (window.top === window.self && window.location.pathname === '/main.html') {
                 initializeHomePageFeatures();
+                // 门户已通过统一认证，可静默换票后在后台同步教务数据；
+                // 登录失效时静默失败，不弹窗打断门户使用
+                setTimeout(() => {
+                    BackgroundSyncSystem.initController();
+                }, 5000);
             }
             return;
         }
@@ -6765,6 +8572,12 @@
         // 4.1 研究生培养方案页面（研究生教育综合系统，含 /pyxx/ 等模块）
         else if (location.host === 'yjsjy.nwpu.edu.cn') {
             initProgramPageEnhancement(); // 功能8
+            // 研究生系统顶层页面也触发同一套后台同步（数据源仍为本科教务 jwxt）
+            if (window.top === window.self) {
+                setTimeout(() => {
+                    BackgroundSyncSystem.initController();
+                }, 5000);
+            }
         }
 
         // 5. 我的课表页面

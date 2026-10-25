@@ -1,0 +1,40 @@
+{
+  "updatedAt": "2026-10-25T12:00:00+08:00",
+  "courseUrl": "https://jwxt.nwpu.edu.cn/student/for-std/course-select",
+  "preNotifyHours": 16,
+  "schedules": [
+    {
+      "identity": "undergraduate",
+      "identityName": "本科生",
+      "term": "2026-2027 秋季学期",
+      "expires": "2026-09-11T00:00:00+08:00",
+      "storageKey": "jwxt_schedule_table_closed_2026_autumn_undergraduate",
+      "groups": [
+        {
+          "groupName": "正选",
+          "phases": [
+            { "name": "第一轮", "type": "positive", "start": "2026-08-18T09:00:00+08:00", "end": "2026-08-21T12:00:00+08:00", "method": "意愿值选课", "scope": "主修专业课" },
+            { "name": "第二轮", "type": "positive", "start": "2026-08-24T09:00:00+08:00", "end": "2026-08-26T12:00:00+08:00", "method": "意愿值选课", "scope": "学期教学计划全部课程" },
+            { "name": "第三轮", "type": "positive", "start": "2026-08-27T13:00:00+08:00", "end": "2026-08-28T13:00:00+08:00", "method": "直选选课", "scope": "学期教学计划全部课程" }
+          ]
+        },
+        {
+          "groupName": "补选",
+          "phases": [
+            { "name": "补选阶段", "type": "makeup", "start": "2026-08-31T09:00:00+08:00", "end": "2026-09-04T12:00:00+08:00", "method": "系统中申请", "scope": "学期开设的全部课程" },
+            { "name": "本研共选", "type": "makeup", "start": "2026-09-08T09:00:00+08:00", "end": "2026-09-10T12:00:00+08:00", "method": "直选选课", "scope": "学期开设的本研共选课程" }
+          ]
+        }
+      ]
+    },
+    {
+      "identity": "graduate",
+      "identityName": "研究生",
+      "term": "2026-2027 秋季学期",
+      "expires": "2026-09-20T00:00:00+08:00",
+      "storageKey": "jwxt_schedule_table_closed_2026_autumn_graduate",
+      "note": "请按研究生院通知补充研究生选课时间；groups 为空时脚本不会显示该身份的提醒",
+      "groups": []
+    }
+  ]
+}

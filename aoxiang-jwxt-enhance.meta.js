@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.3
+// @version      1.8.4
 // @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
@@ -12,9 +12,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @grant        GM_registerMenuCommand
 // @grant        unsafeWindow
 // @connect      electronic-signature.nwpu.edu.cn
+// @connect      jwxt.nwpu.edu.cn
 // @connect      gitee.com
 // @connect      raw.giteeusercontent.com
 // @connect      raw.githubusercontent.com
