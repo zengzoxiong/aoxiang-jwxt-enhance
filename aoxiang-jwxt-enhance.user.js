@@ -204,7 +204,7 @@
             --gm-shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 2px 8px rgba(15, 23, 42, .04);
             --gm-shadow: 0 8px 24px rgba(15, 23, 42, .10);
             --gm-shadow-lg: 0 16px 40px rgba(15, 23, 42, .16);
-            --gm-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, system-ui, sans-serif;
+            --gm-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, system-ui, sans-serif;
             --gm-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
         }
 
@@ -251,7 +251,7 @@
         html body .gm-sync-modal-title {
             font-family: var(--gm-font) !important;
             font-size: 16px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             gap: 8px !important;
             letter-spacing: 0 !important;
@@ -307,7 +307,7 @@
             border-radius: var(--gm-radius) !important;
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             line-height: 1 !important;
             box-sizing: border-box !important;
             transition: background .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease !important;
@@ -434,7 +434,7 @@
             border-radius: var(--gm-radius-sm) !important;
             font-family: var(--gm-font) !important;
             font-size: 11.5px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             line-height: 1 !important;
             border: 1px solid transparent !important;
             box-sizing: border-box !important;
@@ -490,7 +490,7 @@
             border-radius: var(--gm-radius-sm) !important;
             padding: 2px 6px !important;
             font-size: 13px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-course-code-highlight:hover {
             background: var(--gm-primary-border) !important;
@@ -505,7 +505,7 @@
             border-radius: 4px !important;
             font-family: var(--gm-font) !important;
             font-size: 11px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             line-height: 1.4 !important;
             white-space: nowrap !important;
         }
@@ -530,7 +530,7 @@
             color: var(--gm-success-text) !important;
             font-family: var(--gm-font) !important;
             font-size: 11px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             line-height: 1.4 !important;
             white-space: nowrap !important;
         }
@@ -555,7 +555,7 @@
             background: var(--gm-fill) !important;
             color: var(--gm-text-3) !important;
             font-size: 11.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             border-bottom: 1px solid var(--gm-border) !important;
             padding: 10px 12px !important;
         }
@@ -575,7 +575,7 @@
             background: var(--gm-fill) !important;
             color: var(--gm-text-3) !important;
             font-size: 11px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             border-color: var(--gm-border) !important;
         }
         html body .gm-timetable td {
@@ -583,7 +583,7 @@
         }
         html body .gm-tt-name {
             font-size: 12px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
         }
         html body .gm-tt-info {
             color: var(--gm-text-3) !important;
@@ -603,7 +603,7 @@
         html body .gm-tab-item {
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             color: var(--gm-text-3) !important;
             border-bottom-width: 2px !important;
             padding: 12px 10px 10px !important;
@@ -645,7 +645,7 @@
             margin-top: 4px !important;
             border-top: 1px solid var(--gm-border-light) !important;
             letter-spacing: .08em !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
         }
         html body .gm-menu-item {
             font-family: var(--gm-font) !important;
@@ -698,7 +698,7 @@
         html body .gm-dialog-title {
             font-family: var(--gm-font) !important;
             font-size: 15px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             margin-bottom: 4px !important;
         }
@@ -740,7 +740,7 @@
         }
         html body .gm-fl-cat-title {
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             color: var(--gm-text-2) !important;
             margin-bottom: 10px !important;
             gap: 7px !important;
@@ -768,7 +768,7 @@
         }
         html body .gm-fl-name {
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             color: var(--gm-text-1) !important;
         }
         html body .gm-fl-desc {
@@ -814,7 +814,7 @@
             background: var(--gm-danger-bg) !important;
             color: var(--gm-danger-text) !important;
             font-size: 11.5px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-btn-clear-all:hover {
             background: var(--gm-danger) !important;
@@ -829,7 +829,7 @@
             background: var(--gm-danger-bg) !important;
             color: var(--gm-danger-text) !important;
             font-size: 11.5px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-btn-unfollow:hover {
             background: var(--gm-danger) !important;
@@ -861,7 +861,7 @@
         html body .gpa-report-modal h3 {
             font-family: var(--gm-font) !important;
             font-size: 14px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
         }
         html body .gpa-report-modal p,
@@ -895,7 +895,7 @@
         html body .input-group label {
             font-size: 12px !important;
             color: var(--gm-text-2) !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .input-group input {
             background: #fff !important;
@@ -911,7 +911,7 @@
             border: 1px solid var(--gm-success-border) !important;
             color: var(--gm-success-text) !important;
             font-size: 13px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
         }
         html body .gpa-report-modal .tooltip-q {
             width: 16px !important;
@@ -939,7 +939,7 @@
         html body .semester-checkbox-container h3 {
             font-family: var(--gm-font) !important;
             font-size: 16px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             margin-bottom: 16px !important;
         }
@@ -1010,7 +1010,7 @@
         }
         html body .gm-ps-item-name {
             font-size: 13.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             color: var(--gm-text-1) !important;
         }
         html body .gm-ps-item-id {
@@ -1046,7 +1046,7 @@
         html body .gm-ps-info-value {
             font-size: 13px !important;
             color: var(--gm-text-1) !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-ps-info-row,
         html body .gm-ps-info-grid {
@@ -1073,10 +1073,10 @@
             border-bottom: 1px solid var(--gm-border) !important;
             color: var(--gm-primary-text) !important;
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
         }
         html body .gm-course-status-tag {
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-teacher-row {
             padding: 10px 14px !important;
@@ -1127,7 +1127,7 @@
         }
         html body .gm-help-sec-title {
             font-size: 14px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             padding-left: 10px !important;
             border-left: 4px solid var(--gm-primary) !important;
@@ -1169,7 +1169,7 @@
             background: var(--gm-fill) !important;
             color: var(--gm-text-3) !important;
             font-size: 11px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             border-color: var(--gm-border) !important;
         }
         html body .gm-sch-table td {
@@ -1179,7 +1179,7 @@
         }
         html body .gm-sch-highlight {
             color: var(--gm-primary-text) !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
         }
         html body .gm-schedule-footer {
             color: var(--gm-text-3) !important;
@@ -1191,7 +1191,7 @@
             padding: 0 12px !important;
             border-radius: var(--gm-radius) !important;
             font-size: 12px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-btn-go {
             background: var(--gm-primary) !important;
@@ -1207,7 +1207,7 @@
         }
         html body .gm-textbook-title {
             font-size: 14px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             border-left: 4px solid var(--gm-primary) !important;
             padding-left: 10px !important;
@@ -1220,7 +1220,7 @@
             background: var(--gm-fill) !important;
             color: var(--gm-text-3) !important;
             font-size: 11.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             border-color: var(--gm-border) !important;
         }
         html body .gm-textbook-table td {
@@ -1256,7 +1256,7 @@
             background: #fff !important;
             color: var(--gm-text-2) !important;
             font-size: 12px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-trend-toggle-btn:hover,
         html body .gm-trend-toggle-btn.active {
@@ -1275,7 +1275,7 @@
         }
         html body .gm-tc-title {
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
         }
         html body .gm-tc-row {
@@ -1309,7 +1309,7 @@
             background: #fff !important;
             border: 1px solid var(--gm-border) !important;
             color: var(--gm-primary-text) !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             font-size: 13px !important;
         }
         html body #gm-collapse-toggle-btn:hover {
@@ -1337,7 +1337,7 @@
             border-radius: var(--gm-radius-lg) var(--gm-radius-lg) 0 0 !important;
             font-family: var(--gm-font) !important;
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             display: flex !important;
             align-items: center !important;
@@ -1404,7 +1404,7 @@
         html body .gm-semester-dd__item.is-selected {
             background: var(--gm-primary-light) !important;
             color: var(--gm-primary-text) !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
         }
         html body .gm-lesson-panel__sync {
             width: 100% !important;
@@ -1416,7 +1416,7 @@
             color: #fff !important;
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
-            font-weight: 600 !important;
+            font-weight: 400 !important;
             cursor: pointer !important;
         }
         html body .gm-lesson-panel__sync:hover {
@@ -1505,7 +1505,7 @@
             gap: 7px !important;
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
-            font-weight: 700 !important;
+            font-weight: 600 !important;
             color: var(--gm-text-1) !important;
         }
         html body .gm-archive-list {
@@ -1553,7 +1553,7 @@
         html body .gm-archive-slot__name {
             font-family: var(--gm-font) !important;
             font-size: 12.5px !important;
-            font-weight: 700 !important;
+            font-weight: 400 !important;
             color: var(--gm-text-1) !important;
             min-width: 0 !important;
             overflow: hidden !important;
@@ -1647,7 +1647,7 @@
             .gm-dialog-body { display: flex; gap: 14px; padding: 22px 24px 18px; align-items: flex-start; }
             .gm-dialog-icon { flex-shrink: 0; margin-top: 2px; }
             .gm-dialog-text { font-size: 14px; color: #303133; line-height: 1.7; word-break: break-word; }
-            .gm-dialog-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+            .gm-dialog-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
             .gm-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 4px 24px 20px; }
             .gm-dialog-btn { padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; border: 1px solid #dcdfe6; background: #fff; color: #606266; transition: all 0.2s; }
             .gm-dialog-btn:hover { border-color: #c0c4cc; color: #303133; }
@@ -1740,21 +1740,21 @@
             @keyframes gmLinkFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
             .gm-fl-modal { background: #f5f7fa; border-radius: 12px; width: 720px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
             .gm-fl-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; color: #303133; }
-            .gm-fl-title { font-size: 19px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; }
+            .gm-fl-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px; }
             .gm-fl-close { cursor: pointer; color: #909399; font-size: 26px; line-height: 1; user-select: none; transition: color 0.2s; }
             .gm-fl-close:hover { color: #f56c6c; }
             .gm-fl-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
             .gm-fl-category { margin-bottom: 24px; }
-            .gm-fl-cat-title { font-size: 15px; font-weight: bold; color: #606266; margin-bottom: 14px; display:flex; align-items:center; gap:8px;}
+            .gm-fl-cat-title { font-size: 14px; font-weight: 400; color: #606266; margin-bottom: 14px; display:flex; align-items:center; gap:8px;}
             .gm-fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-            .gm-fl-card { background: #fff; border: 1px solid #e4e7ed; border-radius: 8px; padding: 14px; text-decoration: none; display: flex; align-items: center; gap: 14px; transition: all 0.25s; cursor: pointer; }
-            .gm-fl-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); border-color: #c6e2ff; }
+            .gm-fl-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 14px; text-decoration: none; display: flex; align-items: center; gap: 14px; transition: all 0.25s; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+            .gm-fl-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(64,158,255,0.10); border-color: #c6e2ff; }
             .gm-fl-icon-box { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
             .gm-fl-icon-box svg { width: 20px; height: 20px; }
             .gm-fl-icon-box img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
             .gm-fl-info { flex: 1; min-width: 0; }
-            .gm-fl-name { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-            .gm-fl-arrow { font-size: 12px; color: #c0c4cc; transition: transform 0.2s, color 0.2s; font-weight: bold; }
+            .gm-fl-name { font-size: 14px; font-weight: 400; color: #303133; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+            .gm-fl-arrow { font-size: 12px; color: #c0c4cc; transition: transform 0.2s, color 0.2s; }
             .gm-fl-card:hover .gm-fl-arrow { transform: translateX(3px); color: #409EFF; }
             .gm-fl-desc { font-size: 12px; color: #909399; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         `;
@@ -1842,7 +1842,7 @@
 
                                     if (UpdateChecker.compareVersion(latestVersion, currentVersion) > 0) {
                                         isUpdateAvailable = true;
-                                        if (btnText) btnText.innerHTML = `<span style="color:#F56C6C;font-weight:bold;display:flex;align-items:center;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>发现新版本 v${latestVersion}</span>`;
+                                        if (btnText) btnText.innerHTML = `<span style="color:#F56C6C;font-weight:400;display:flex;align-items:center;"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>发现新版本 v${latestVersion}</span>`;
                                         const badge = document.querySelector('.gm-float-ball .gm-badge');
                                         if (badge) badge.style.display = 'block';
                                     } else {
@@ -1889,12 +1889,12 @@
                 点击下方按钮可从<b>Gitee / GitHub</b>下载最新版脚本，<br>下载后<b>拖拽到当前浏览器的油猴页面</b>中完成更新：
             </p>
             <div style="display:flex; flex-direction:column; gap:12px;">
-                <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:bold; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
+                <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:400; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                     下载最新版代码
                 </button>
                 <div id="gm-update-tip" style="font-size:13px; color:#E6A23C; display:none; text-align:left; background:#fdf6ec; padding:10px; border-radius:6px; border:1px solid #faecd8; line-height:1.5;">
-                    <div style="display:flex; align-items:center; margin-bottom:4px; font-weight:bold; color:#67C23A;">
+                    <div style="display:flex; align-items:center; margin-bottom:4px; font-weight:400; color:#67C23A;">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>代码下载成功！
                     </div>
                     请在浏览器的下载列表中找到刚刚下载的<b>“aoxiang-jwxt-enhance.user.js”</b>，将其<b>拖拽到当前浏览器的油猴页面中</b>，即可完成更新！
@@ -2414,7 +2414,7 @@
                 font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif !important;
                 font-size: 12px !important; color: #909399 !important; padding: 10px 18px 4px !important;
                 margin-top: 4px !important; border-top: 1px solid #f0f2f5 !important;
-                font-weight: bold !important; pointer-events: none !important; letter-spacing: 1px !important;
+                font-weight: 400 !important; pointer-events: none !important; letter-spacing: 1px !important;
             }
             .gm-menu-group-title:first-child { margin-top: 0 !important; border-top: none !important; padding-top: 6px !important; }
 
@@ -2668,10 +2668,10 @@
         overlay.id = 'gm-sync-overlay';
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
         overlay.innerHTML = `
-            <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步选课数据...</div>
+            <div style="font-size:24px; font-weight:600; margin-bottom:15px;">正在同步选课数据...</div>
             <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新选课学期...</div>
             <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
-            <div style="font-size:18px;">已获取: <span id="gm-sync-count" style="color:#4facfe; font-weight:bold;">0</span> 条</div>
+            <div style="font-size:18px;">已获取: <span id="gm-sync-count" style="color:#4facfe; font-weight:600;">0</span> 条</div>
             <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
         `;
         document.body.appendChild(overlay);
@@ -3178,7 +3178,7 @@
                         <b style="font-size:16px;color:#303133;">数据导入完成</b>
                     </div>
                     <div style="font-size:13px;color:#606266;line-height:1.6;margin-bottom:14px;">${summary}</div>
-                    <div style="font-size:13px;color:#303133;font-weight:600;margin-bottom:4px;">请选择要覆盖的存档槽位：</div>
+                    <div style="font-size:13px;color:#303133;font-weight:400;margin-bottom:4px;">请选择要覆盖的存档槽位：</div>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         ${state.slots.map((slot, i) => `
                         <button data-index="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid ${state.sourceSlot === i ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${state.sourceSlot === i ? '#f0f7ff' : '#f5f7fa'};cursor:pointer;text-align:left;transition:background 0.2s;font-size:13px;color:#303133;">
@@ -3349,7 +3349,7 @@
                 display: flex; justify-content: space-between; align-items: center;
                 background: #fcfcfc;
             }
-            .gm-help-title { font-size: 18px; font-weight: bold; color: #333; display: flex; align-items: center; gap: 8px; }
+            .gm-help-title { font-size: 17px; font-weight: 600; color: #333; display: flex; align-items: center; gap: 8px; }
             .gm-help-close { border: none; background: transparent; font-size: 24px; color: #999; cursor: pointer; transition: color 0.2s; }
             .gm-help-close:hover { color: #F56C6C; }
 
@@ -3362,7 +3362,7 @@
                 border-bottom: 1px solid #f0f0f0;
             }
             .gm-help-sec-title {
-                font-size: 15px; font-weight: bold; color: #303133;
+                font-size: 15px; font-weight: 600; color: #303133;
                 margin-bottom: 12px; padding-left: 10px;
                 border-left: 4px solid #409EFF;
                 display: flex; align-items: center; justify-content: space-between;
@@ -3752,10 +3752,10 @@
             .gm-modal-content { background-color: #fff; border-radius: 12px; width: 95%; max-width: 1200px; height: 90vh; max-height: 950px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; animation: gmFadeIn 0.2s ease-out; }
             @keyframes gmFadeIn { from { opacity: 0; transform: scale(0.99); } to { opacity: 1; transform: scale(1); } }
             .gm-modal-header { padding: 0 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 50px; }
-            .gm-modal-title { font-size: 16px; font-weight: bold; color: #333; display: flex; align-items: center; gap: 8px; }
+            .gm-modal-title { font-size: 16px; font-weight: 600; color: #333; display: flex; align-items: center; gap: 8px; }
             .gm-modal-close { border: none; background: none; font-size: 24px; color: #999; cursor: pointer; padding: 0 10px; display:flex; align-items:center; }
             .gm-tabs { display: flex; gap: 20px; margin-left: 30px; height: 100%; }
-            .gm-tab-item { display: flex; align-items: center; height: 100%; font-size: 14px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; padding: 0 5px; font-weight: 500; }
+            .gm-tab-item { display: flex; align-items: center; height: 100%; font-size: 14px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; padding: 0 5px; font-weight: 400; }
             .gm-tab-item.active { color: #409EFF; border-bottom-color: #409EFF; }
             .gm-filter-bar { padding: 10px 20px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 15px;}
             .gm-filter-group { display: flex; align-items: center; gap: 10px; }
@@ -3767,20 +3767,20 @@
             .gm-view-container { flex: 1; overflow-y: auto; padding: 0 20px 20px 20px; display: none; height: 100%; }
             .gm-view-container.active { display: block; }
             .gm-course-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
-            .gm-course-table th { position: sticky; top: 0; background: #fff; z-index: 10; padding: 12px 10px; text-align: left; font-size: 13px; color: #909399; font-weight: bold; border-bottom: 2px solid #f0f0f0; }
+            .gm-course-table th { position: sticky; top: 0; background: #fff; z-index: 10; padding: 12px 10px; text-align: left; font-size: 13px; color: #909399; font-weight: 400; border-bottom: 2px solid #f0f0f0; }
             .gm-course-table td { padding: 10px; font-size: 13px; color: #606266; border-bottom: 1px solid #ebeef5; vertical-align: middle; line-height: 1.4; }
             .gm-code-badge { background: #f4f4f5; color: #909399; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
             .gm-btn-unfollow { padding: 4px 10px; font-size: 12px; border-radius: 3px; border: 1px solid #fab6b6; color: #f56c6c; background: #fef0f0; cursor: pointer; }
             .gm-timetable { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; border: 1px solid #e0e0e0; font-size: 12px; }
-            .gm-timetable th { background: #f8f9fa; color: #333; font-weight: bold; padding: 8px; text-align: center; border: 1px solid #ebeef5; height: 36px; }
+            .gm-timetable th { background: #f8f9fa; color: #333; font-weight: 400; padding: 8px; text-align: center; border: 1px solid #ebeef5; height: 36px; }
             .gm-timetable td { border: 1px solid #ebeef5; height: auto; }
             .gm-tt-period { position: relative; padding: 0 !important; vertical-align: top; width: 50px; height: 1px; }
             .gm-period-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
-            .gm-period-num { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #555; font-weight: bold; width: 100%; }
+            .gm-period-num { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #555; font-weight: 400; width: 100%; }
             .gm-tt-cell-wrapper { width: 100%; min-height: 60px; display: flex; flex-direction: column; gap: 4px; padding: 4px; box-sizing: border-box; }
             .gm-tt-course-block { padding: 6px; font-size: 12px; line-height: 1.35; color: #333; cursor: pointer; border-radius: 0; overflow: hidden; }
             .gm-tt-course-block:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: scale(1.01); z-index: 5; transition: all 0.1s; }
-            .gm-tt-name { font-weight: bold; color: #000; margin-bottom: 3px; font-size: 13px; }
+            .gm-tt-name { font-weight: 400; color: #000; margin-bottom: 3px; font-size: 13px; }
             .gm-tt-info { color: #555; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .gm-tt-tag { opacity: 0.9; font-size: 11px; color: #333; background: rgba(255,255,255,0.6); padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
             .gm-tt-footer { margin-top:10px; font-size:12px; color:#606266; text-align:right; padding-right:10px;}
@@ -3825,8 +3825,8 @@
                         </div>
 
                         <div class="gm-right-actions" style="display:flex; align-items:center; gap:15px;">
-                            <span style="font-size:13px; color:#606266; font-weight:bold;">
-                                总学分: <span id="gm-total-credits" style="color:#409EFF">0</span>
+                            <span style="font-size:13px; color:#606266; font-weight:400;">
+                                总学分: <span id="gm-total-credits" style="color:#409EFF; font-weight:600;">0</span>
                             </span>
                             <button id="gm-btn-clear-all" class="gm-btn-clear-all">清空当前</button>
                         </div>
@@ -3958,7 +3958,7 @@
     .gm-semester-item:hover { background: #eef5fe; border-color: #b3d8ff; color: #409EFF; }
     .gm-semester-item input[type='checkbox'] { margin-right: 10px; width: 16px; height: 16px; cursor: pointer; }
     .button-container { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
-    .semester-checkbox-container button { padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; border: none; }
+    .semester-checkbox-container button { padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: all 0.2s; border: none; }
     .confirm-export-button { background-color: #409EFF; color: white; }
     .confirm-export-button:hover { background-color: #66b1ff; transform: translateY(-1px); }
     .select-all-button { background-color: #f0f2f5; color: #595959; border: 1px solid #d9d9d9 !important; }
@@ -4148,12 +4148,12 @@
             .gpa-calc-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.02); }
             .gpa-calc-card h4 { margin: 0 0 16px 0; font-size: 15px; color: #303133; font-weight: 600; display: flex; align-items: center; gap: 8px;}
             .input-group { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 15px; gap: 6px; }
-            .input-group label { width: 100%; font-size: 13px; color: #606266; font-weight: 500;}
+            .input-group label { width: 100%; font-size: 13px; color: #606266; font-weight: 400;}
             .input-group input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; transition: all 0.2s; outline: none; background: #fafafa;}
             .input-group input:focus { border-color: #409EFF; background: #fff; box-shadow: 0 0 0 2px rgba(64,158,255,0.1);}
-            .calculate-btn { width: 100%; padding: 10px; background-color: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; margin-top: 5px; transition: background 0.2s; }
+            .calculate-btn { width: 100%; padding: 10px; background-color: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; margin-top: 5px; transition: background 0.2s; }
             .calculate-btn:hover { background-color: #66b1ff; }
-            .prediction-result { margin-top: 15px; font-weight: bold; text-align: center; font-size: 15px; min-height: 24px; color: #303133; background: #f0f9eb; padding: 12px; border-radius: 6px; display: none; }
+            .prediction-result { margin-top: 15px; font-weight: 600; text-align: center; font-size: 15px; min-height: 24px; color: #303133; background: #f0f9eb; padding: 12px; border-radius: 6px; display: none; }
 
             .gpa-report-modal .tooltip-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #c0c4cc; color: white; font-size: 12px; cursor: help; margin-left: 6px; position: relative; }
             .gpa-report-modal .tooltip-q:hover::after { content: attr(data-gm-tooltip); position: absolute; left: 50%; bottom: 130%; transform: translateX(-50%); background-color: #303133; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: normal; white-space: pre-line; z-index: 10; width: max-content; max-width: 280px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
@@ -4215,7 +4215,7 @@
             </p>
         `;
         } else {
-            contentHTML += `<p style="color:#2E7D32 !important; font-weight:bold; text-align:center; padding: 10px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
+            contentHTML += `<p style="color:#2E7D32 !important; font-weight:400; text-align:center; padding: 10px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
         }
 
         contentHTML += `
@@ -4367,7 +4367,7 @@
         .el-card__body .header { display: flex; justify-content: space-between; align-items: center; }
         .gm-trend-toggle-btn { padding: 5px 12px; font-size: 13px; border-radius: 4px; border: 1px solid #dcdfe6; background: #fff; color: #606266; cursor: pointer; transition: all 0.3s; outline: none; }
         .gm-trend-toggle-btn:hover { color: #409EFF; border-color: #c6e2ff; background-color: #ecf5ff; }
-        .gm-trend-toggle-btn.active { color: #409EFF; border-color: #409EFF; background-color: #ecf5ff; font-weight: bold; }
+        .gm-trend-toggle-btn.active { color: #409EFF; border-color: #409EFF; background-color: #ecf5ff; font-weight: 400; }
         .gm-trend-detail-panel { overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; border-top: 1px dashed transparent; }
         .gm-trend-detail-panel.show { max-height: 800px; opacity: 1; margin-top: 15px; padding-top: 15px; border-top-color: #ebeef5; }
         .gm-trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
@@ -4375,10 +4375,10 @@
         .gm-trend-card:hover { box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05); background: #fff; }
         .gm-tc-close { position: absolute; top: 4px; right: 6px; font-size: 16px; color: #c0c4cc; cursor: pointer; line-height: 1; transition: color 0.2s, transform 0.2s; user-select: none; }
         .gm-tc-close:hover { color: #f56c6c; transform: scale(1.2); }
-        .gm-tc-title { font-size: 13px; font-weight: bold; color: #303133; margin-bottom: 8px; text-align: center; padding: 0 10px;}
+        .gm-tc-title { font-size: 13px; font-weight: 600; color: #303133; margin-bottom: 8px; text-align: center; padding: 0 10px;}
         .gm-tc-row { display: flex; align-items: center; font-size: 12px; color: #666; margin-top: 4px; line-height: 1; }
         .gm-tc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
-        .gm-tc-val { margin-left: auto; font-weight: 900; font-family: Consolas, monospace; font-size: 13px; color: #333; }
+        .gm-tc-val { margin-left: auto; font-weight: 600; font-family: Consolas, monospace; font-size: 13px; color: #333; }
     `;
         document.head.appendChild(style);
     }
@@ -4602,7 +4602,7 @@
         const tableBodyRows = outOfPlanGrades.map((grade, index) => {
             const score = grade['成绩'];
             const isFail = parseFloat(score) < 60 && !isNaN(parseFloat(score));
-            const scoreStyle = isFail ? 'color: #F56C6C; font-weight: bold;' : '';
+            const scoreStyle = isFail ? 'color: #F56C6C; font-weight: 600;' : '';
             const passStatus = getPassStatus(score);
             return `<tr class="el-table__row"><td class="cell-style"><div class="cell">${index + 1}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(grade['课程名称'] || '')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['课程代码'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学期'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${grade['是否必修'] ? '是' : '否'}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学分'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip" style="${scoreStyle}">${esc(grade['成绩'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['绩点'] ?? '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(classRankMap.get(grade['课程代码']) || '-')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${passStatus}</div></td></tr>`;
         }).join('');
@@ -5014,7 +5014,7 @@
                 reopenBtn.type = 'button';
                 reopenBtn.textContent = '选课助手';
                 reopenBtn.title = '重新打开选课助手面板';
-                reopenBtn.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999; padding:8px 14px; border:1px solid var(--gm-border); border-radius:8px; background:#fff; color:var(--gm-primary-text); font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.12);';
+                reopenBtn.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999; padding:8px 14px; border:1px solid var(--gm-border); border-radius:8px; background:#fff; color:var(--gm-primary-text); font-size:13px; font-weight:400; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.12);';
                 reopenBtn.onclick = () => { reopenBtn.remove(); panel.style.display = 'block'; };
                 document.body.appendChild(reopenBtn);
             };
@@ -5239,10 +5239,10 @@
             div.id = 'gm-sync-overlay';
             div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
             div.innerHTML = `
-            <div style="font-size:24px; font-weight:bold; margin-bottom:15px;">正在同步课程数据...</div>
+            <div style="font-size:24px; font-weight:600; margin-bottom:15px;">正在同步课程数据...</div>
             <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">锁定抓取学期: ${semesterName}</div>
             <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
-            <div style="font-size:18px;">已抓取: <span id="gm-sync-count" style="color:#4facfe; font-weight:bold;">0</span> 条</div>
+            <div style="font-size:18px;">已抓取: <span id="gm-sync-count" style="color:#4facfe; font-weight:600;">0</span> 条</div>
             <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
         `;
             document.body.appendChild(div);
@@ -5267,7 +5267,7 @@
         if (!document.getElementById('gm-teacher-link-style')) {
             const style = getOrCreateStyleEl('gm-teacher-link-style');
             style.textContent = `
-            .gm-teacher-link { color: #409EFF !important; text-decoration: none; font-weight: bold; transition: all 0.2s; cursor: pointer; }
+            .gm-teacher-link { color: #409EFF !important; text-decoration: none; font-weight: 400; transition: all 0.2s; cursor: pointer; }
             .gm-teacher-link:hover { color: #0056b3 !important; text-decoration: underline; background-color: rgba(64,158,255,0.1); border-radius: 4px; padding: 2px 4px; }
         `;
             document.head.appendChild(style);
@@ -5681,7 +5681,7 @@
                  float: right;               /* 靠最右侧 */
                  margin-right: 5px;          /* 右侧留一点缝隙 */
                  margin-top: 5px;           /* 微调垂直位置，使其垂直居中 */
-                 font-weight: bold;          /* 字体加粗 */
+                 font-weight: 400;           /* 正常字重 */
                  font-size: 14px;            /* 字体加大 */
                  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.5); /* 添加蓝色光晕阴影，增加显眼度 */
                  transition: all 0.3s;
@@ -6324,7 +6324,7 @@
             .gm-course-code-highlight {
                 border: 1.5px dashed var(--gm-primary);
                 color: var(--gm-primary-text);
-                font-weight: 600;
+                font-weight: 400;
                 font-size: 13px;
                 cursor: pointer;
                 background-color: var(--gm-primary-light);
@@ -6358,13 +6358,13 @@
                 background: var(--gm-fill);
                 padding: 14px 18px;
                 border-bottom: 1px solid var(--gm-border);
-                font-weight: 700; color: var(--gm-text-1); font-size: 14px;
+                font-weight: 600; color: var(--gm-text-1); font-size: 14px;
                 display:flex; justify-content:space-between; align-items: center;
                 border-radius: var(--gm-radius-lg) var(--gm-radius-lg) 0 0;
                 letter-spacing: 0;
             }
             .gm-pt-badge {
-                font-weight: 600; color: var(--gm-primary-text); font-size: 11.5px;
+                font-weight: 400; color: var(--gm-primary-text); font-size: 11.5px;
                 background: var(--gm-primary-light);
                 border: 1px solid var(--gm-primary-border);
                 padding: 2px 8px; border-radius: var(--gm-radius-sm);
@@ -6394,7 +6394,7 @@
                 margin-bottom: 4px;
             }
             .gm-pt-title {
-                font-weight: 700; font-size: 14px; color: var(--gm-text-1);
+                font-weight: 400; font-size: 14px; color: var(--gm-text-1);
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
                 flex: 1; min-width: 0; padding-right: 10px;
             }
@@ -6404,7 +6404,7 @@
                 display: flex; justify-content: space-between; align-items: center;
                 margin-bottom: 8px;
             }
-            .gm-pt-code { font-size: 13.5px; font-weight: 600; color: var(--gm-text-3); font-family: var(--gm-mono); }
+            .gm-pt-code { font-size: 13.5px; font-weight: 400; color: var(--gm-text-3); font-family: var(--gm-mono); }
 
             /* 元信息区：教师、地点 */
             .gm-pt-meta { display: flex; flex-direction: column; gap: 5px; color: var(--gm-text-2); font-size: 12.5px; line-height: 1.55; }
@@ -6414,7 +6414,7 @@
 
             /* 人数标签：与界面同一字体，数字等宽对齐 */
             .gm-pt-stat {
-                font-family: var(--gm-font); font-size: 12.5px; font-weight: 700;
+                font-family: var(--gm-font); font-size: 12.5px; font-weight: 600;
                 font-variant-numeric: tabular-nums;
                 padding: 2px 7px; border-radius: var(--gm-radius-sm); flex-shrink: 0;
             }
@@ -6609,7 +6609,7 @@
 
             tooltip.innerHTML = `
             <div class="gm-pt-header">
-                <span style="display:flex;align-items:center;gap:8px">${svgs.book} <span style="font-family:var(--gm-mono);font-size:17px;font-weight:700;">${esc(code)}</span></span>
+                <span style="display:flex;align-items:center;gap:8px">${svgs.book} <span style="font-family:var(--gm-mono);font-size:17px;font-weight:600;">${esc(code)}</span></span>
                 <span class="gm-pt-badge">本学期 ${courses.length} 个班级</span>
             </div>
             ${contentHTML}
@@ -6856,14 +6856,14 @@
 
                     // A. 检查状态: 进行中
                     if (!activePhaseFound && now >= startTime && now <= endTime) {
-                        statusHtml = `当前处于 <span style="color: #f56c6c; font-weight: bold; border-bottom: 2px solid #f56c6c;">${group.groupName} - ${phase.name}</span>`;
+                        statusHtml = `当前处于 <span style="color: #f56c6c; font-weight: 400; border-bottom: 2px solid #f56c6c;">${group.groupName} - ${phase.name}</span>`;
                         activePhaseFound = true;
                     }
                     // B. 检查状态: 即将开始 (正选前N小时提示)
                     else if (!activePhaseFound && phase.type === 'positive' && now >= preStartTime && now < startTime) {
                         const hoursLeft = Math.ceil((startTime - now) / 3600000);
-                        statusHtml = `<span style="color: #E65100; font-weight:bold;">${group.groupName}${phase.name}</span> 将于 ${hoursLeft} 小时后开始。` +
-                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:bold; margin-left:10px;">[建议提前点击此处同步课程余量数据]</span>`;
+                        statusHtml = `<span style="color: #E65100; font-weight:400;">${group.groupName}${phase.name}</span> 将于 ${hoursLeft} 小时后开始。` +
+                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:400; margin-left:10px;">[建议提前点击此处同步课程余量数据]</span>`;
                         showPreSyncLink = true;
                         activePhaseFound = true;
                     }
@@ -6880,7 +6880,7 @@
                     // 处理第一列的 Rowspan (合并单元格)
                     if (pIndex === 0) {
                         const borderStyle = gIndex > 0 ? 'border-top:2px solid #ebeef5;' : '';
-                        tableRowsHtml += `<td rowspan="${group.phases.length}" style="font-weight:bold; ${borderStyle}">${group.groupName}</td>`;
+                        tableRowsHtml += `<td rowspan="${group.phases.length}" style="font-weight:400; ${borderStyle}">${group.groupName}</td>`;
                     }
 
                     // 高亮选课方式
@@ -6920,8 +6920,8 @@
                 .gm-sch-table th, .gm-sch-table td {
                     border: 1px solid #ebeef5; padding: 6px 8px; text-align: center; vertical-align: middle;
                 }
-                .gm-sch-table th { background-color: #f5f7fa; font-weight: bold; color: #606266; }
-                .gm-sch-highlight { color: #409EFF; font-weight: bold; }
+                .gm-sch-table th { background-color: #f5f7fa; font-weight: 400; color: #606266; }
+                .gm-sch-highlight { color: #409EFF; font-weight: 400; }
                 .gm-schedule-footer {
                     display: flex; justify-content: space-between; align-items: center;
                     font-size: 12px; color: #909399; margin-top: 8px;
@@ -6944,9 +6944,9 @@
             const div = document.createElement('div');
             div.className = 'gm-schedule-box';
             div.innerHTML = `
-            <div style="font-weight:bold; font-size:14px; margin-bottom:8px; color:#303133; text-align:center;">
+            <div style="font-weight:600; font-size:14px; margin-bottom:8px; color:#303133; text-align:center;">
                 选课时间安排表
-                <span style="font-size:11.5px; font-weight:600; color:var(--gm-primary-text); background:var(--gm-primary-light); border:1px solid var(--gm-primary-border); padding:1px 6px; border-radius:6px; margin-left:6px; vertical-align:1px;">${identityName}</span>
+                <span style="font-size:11.5px; font-weight:400; color:var(--gm-primary-text); background:var(--gm-primary-light); border:1px solid var(--gm-primary-border); padding:1px 6px; border-radius:6px; margin-left:6px; vertical-align:1px;">${identityName}</span>
             </div>
             <div class="gm-status-bar">${statusHtml}</div>
             <table class="gm-sch-table">
@@ -7068,13 +7068,13 @@
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
             .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
             .gm-modal-header { padding: 18px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
-            .gm-modal-title { font-size: 18px; font-weight: 700; color: #303133; letter-spacing: 0.5px; }
+            .gm-modal-title { font-size: 17px; font-weight: 600; color: #303133; }
             .gm-close-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #909399; transition: all 0.2s; }
             .gm-close-btn:hover { background-color: #f56c6c; color: #fff; transform: rotate(90deg); }
             .gm-close-btn svg { width: 16px; height: 16px; fill: currentColor; }
             .gm-eval-body { padding: 20px; overflow-y: auto; flex: 1; background: #f5f7fa; }
             .gm-course-group { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); overflow: hidden; }
-            .gm-course-header { background: #eef5fe; padding: 10px 15px; border-bottom: 1px solid #ebeef5; font-weight: bold; color: #409EFF; font-size: 14px; display: flex; align-items: center; gap: 8px; justify-content: space-between;}
+            .gm-course-header { background: #eef5fe; padding: 10px 15px; border-bottom: 1px solid #ebeef5; font-weight: 600; color: #409EFF; font-size: 14px; display: flex; align-items: center; gap: 8px; justify-content: space-between;}
             .gm-course-status-tag { font-size: 12px; font-weight: normal; padding: 2px 8px; border-radius: 10px; }
             .gm-tag-done { background: #f0f9eb; color: #67C23A; border: 1px solid #e1f3d8; }
             .gm-tag-todo { background: #fdf6ec; color: #E6A23C; border: 1px solid #faecd8; }
@@ -7082,7 +7082,7 @@
             .gm-teacher-row:last-child { border-bottom: none; }
             .gm-teacher-row:hover { background: #fafafa; }
             .gm-teacher-row.gm-row-done { background: #fcfcfc; color: #999; }
-            .gm-t-name { flex: 1; font-size: 14px; color: #606266; margin-left: 10px; font-weight: 500; display: flex; align-items: center; gap: 5px; }
+            .gm-t-name { flex: 1; font-size: 14px; color: #606266; margin-left: 10px; font-weight: 400; display: flex; align-items: center; gap: 5px; }
             .gm-row-done .gm-t-name { color: #a8abb2; text-decoration: line-through; }
             .gm-done-badge { font-size: 12px; color: #67C23A; border: 1px solid #67C23A; padding: 0 4px; border-radius: 3px; transform: scale(0.9); text-decoration: none; display: inline-block;}
             .gm-score-input { width: 80px; padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px; text-align: center; font-family: Consolas, monospace; transition: 0.2s; margin-right: 15px; }
@@ -7092,15 +7092,15 @@
             .gm-checkbox:disabled { cursor: not-allowed; opacity: 0.5; }
             .gm-status-box { width: 70px; text-align: right; font-size: 12px; }
             .gm-modal-footer { padding: 16px 24px; border-top: 1px solid #eee; background: #fff; border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 15px; }
-            .gm-btn { padding: 9px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; font-weight: 500; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+            .gm-btn { padding: 9px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; font-weight: 400; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
             .gm-btn-primary { background: #409EFF; color: white; }
             .gm-btn-primary:hover { background: #66b1ff; }
             .gm-btn-warning { background: #E6A23C; color: white; }
             .gm-btn-warning:hover { background: #ebb563; }
             .gm-btn:disabled { opacity: 0.6; cursor: not-allowed; background: #e4e7ed; color: #909399; }
             .gm-status-pending { color: #909399; }
-            .gm-status-running { color: #409EFF; font-weight: bold; }
-            .gm-status-success { color: #67C23A; font-weight: bold; }
+            .gm-status-running { color: #409EFF; font-weight: 400; }
+            .gm-status-success { color: #67C23A; font-weight: 400; }
             .gm-status-error { color: #F56C6C; }
             @keyframes gmFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
         `;
@@ -7576,7 +7576,7 @@
             btn.id = 'gm-page-eval-btn';
             btn.className = 'el-button el-button--primary el-button--small';
             btn.innerHTML = `<i class="el-icon-s-cooperation"></i> 打开自动评教`;
-            btn.style.cssText = 'margin-left: 15px; vertical-align: top; height: 32px; font-weight: bold; box-shadow: 0 2px 6px rgba(64,158,255, 0.3);';
+            btn.style.cssText = 'margin-left: 15px; vertical-align: top; height: 32px; font-weight: 400; box-shadow: 0 2px 6px rgba(64,158,255, 0.3);';
 
             if (targetContainer.parentNode) targetContainer.parentNode.insertBefore(btn, targetContainer.nextSibling);
             else targetContainer.appendChild(btn);
@@ -7863,9 +7863,9 @@
             const style = getOrCreateStyleEl('gm-person-search-style');
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out;}
-            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 880px; max-width: 95%; height: 75vh; max-height: 850px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 880px; max-width: 95%; height: 75vh; max-height: 850px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif; }
             .gm-modal-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-            .gm-modal-title { font-size: 19px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;}
+            .gm-modal-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px;}
             .gm-modal-close { border: none; background: transparent; font-size: 26px; color: #909399; cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s; font-family: Arial, sans-serif;}
             .gm-modal-close:hover { color: #f56c6c; }
 
@@ -7877,7 +7877,7 @@
             .gm-ps-search-bar { display: flex; gap: 10px; }
             .gm-ps-input { flex: 1; padding: 10px 14px; border: 1px solid #dcdfe6; border-radius: 6px; outline: none; font-size: 14px; transition: all 0.2s; color: #303133; width: 100%; box-sizing: border-box;}
             .gm-ps-input:focus { border-color: #409EFF; box-shadow: 0 0 0 2px rgba(64,158,255,0.1);}
-            .gm-ps-btn { padding: 0 18px; background: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; white-space: nowrap;}
+            .gm-ps-btn { padding: 0 18px; background: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: background 0.2s; white-space: nowrap;}
             .gm-ps-btn:hover { background: #66b1ff; }
 
             .gm-ps-list-container { flex: 1; overflow-y: auto; padding: 0; position: relative; }
@@ -7888,7 +7888,7 @@
             .gm-ps-list-item:hover { background: #f0f7ff; }
             .gm-ps-list-item.active { background: #ecf5ff; }
             .gm-ps-list-item.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #409EFF; }
-            .gm-ps-item-name { font-size: 16px; font-weight: 600; color: #2c3e50; display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.5px;}
+            .gm-ps-item-name { font-size: 15px; font-weight: 400; color: #303133; display: flex; justify-content: space-between; align-items: center;}
             .gm-ps-item-id { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 13.5px; color: #8c939d; letter-spacing: 0.8px;}
             .gm-ps-loader { padding: 24px; text-align: center; color: #909399; font-size: 14px; }
 
@@ -7905,8 +7905,8 @@
             .gm-ps-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px dashed #ebeef5; }
             .gm-ps-info-col { display: flex; flex-direction: column; gap: 8px; }
 
-            .gm-ps-info-label { font-size: 13px; color: #909399; font-weight: 500;}
-            .gm-ps-info-value { font-size: 15px; color: #303133; font-weight: 500; letter-spacing: 0.5px;}
+            .gm-ps-info-label { font-size: 13px; color: #909399; font-weight: 400;}
+            .gm-ps-info-value { font-size: 15px; color: #303133; font-weight: 400;}
 
             @keyframes gmFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
             @keyframes gmFadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -7962,7 +7962,7 @@
                                 <div class="gm-ps-avatar" id="gm-ps-card-avatar">A</div>
                             </div>
                             <div class="gm-ps-card-body">
-                                <div id="gm-ps-card-name" style="font-size: 24px; font-weight: 600; color: #2c3e50; margin-bottom: 8px; letter-spacing: 1px;">-</div>
+                                <div id="gm-ps-card-name" style="font-size: 22px; font-weight: 600; color: #2c3e50; margin-bottom: 8px; letter-spacing: 1px;">-</div>
                                 <div id="gm-ps-card-id" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #8c939d; font-size: 15px; margin-bottom: 28px; letter-spacing: 0.8px;">-</div>
 
                                 <!-- 提取的籍贯和性别（双列网格） -->
@@ -8368,7 +8368,7 @@
                 font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
             }
             .gm-textbook-title {
-                font-size: 16px; font-weight: bold; color: #303133; margin-bottom: 15px;
+                font-size: 16px; font-weight: 600; color: #303133; margin-bottom: 15px;
                 border-left: 4px solid #409EFF; padding-left: 10px;
             }
             .gm-textbook-table {
@@ -8378,14 +8378,14 @@
                 border: 1px solid #ebeef5; padding: 10px 15px; text-align: center; vertical-align: middle;color: #606266;
             }
             .gm-textbook-table th {
-                background: #f5f7fa; font-weight: bold; color: #333;
+                background: #f5f7fa; font-weight: 400; color: #333;
             }
             .gm-textbook-table tr:hover { background-color: #f5f7fa; }
             .gm-textbook-empty { text-align: center; color: #909399; padding: 30px; }
-            .gm-textbook-course { font-weight: bold; color: #409EFF; }
+            .gm-textbook-course { font-weight: 400; color: #409EFF; }
             .gm-textbook-course a { color: #409EFF; text-decoration: none; transition: color 0.2s; }
             .gm-textbook-course a:hover { color: #66b1ff; text-decoration: underline; }
-            .gm-online-cell { background: #fdf6ec; color: #e6a23c !important; font-weight: 500; }
+            .gm-online-cell { background: #fdf6ec; color: #e6a23c !important; font-weight: 400; }
             .gm-online-btn {
                 display: inline-block; padding: 4px 12px; margin-left: 10px;
                 background-color: #409EFF; color: #fff; border-radius: 4px;
