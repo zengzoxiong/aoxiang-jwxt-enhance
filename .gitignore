@@ -41,6 +41,7 @@ CLAUDE.md
 
 # Agent 工作区（.temp 中间文件 / .output 结果文件 / harness 与 MCP 缓存）
 .agent/
+.zcode/
 
 # 会话规划文件（本地工作记忆，不入库）
 task_plan.md

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         翱翔教务功能加强
 // @namespace    http://tampermonkey.net/
-// @version      1.8.4
-// @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索
+// @version      1.8.5
+// @description  1.提供GPA分析报告；2. 导出课程成绩与教学班排名；3.更好的“学生画像”显示；4.选课助手；5.课程关注与后台同步；6.一键自动评教；7.人员信息检索；8.课表导出二维码
 // @author       leamloli
 // @match        https://jwxt.nwpu.edu.cn/*
 // @match        https://jwxt.nwpu.edu.cn/student/for-std/course-select/some-page*
@@ -23,9 +23,10 @@
 // @run-at       document-start
 // @require      https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
 // @homepage     https://github.com/zengzoxiong/aoxiang-jwxt-enhance
-// @downloadURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.user.js
-// @updateURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/aoxiang-jwxt-enhance.meta.js
+// @downloadURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/main/aoxiang-jwxt-enhance.user.js
+// @updateURL https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/main/aoxiang-jwxt-enhance.meta.js
 // ==/UserScript==
 (function () {
     'use strict';
@@ -48,6 +49,7 @@
     //       ⑥ 学生画像  → enhancePortraitPage()
     //       ⑦ 培养方案  → initProgramPageEnhancement()
     //       ⑧ 我的课表  → TextbookInfoModule.initUI()（UI 阶段；数据阶段由 installHook 缓存兜底）
+    //                    + ScheduleQrModule.initUI()（导出二维码按钮；数据由 installHook 拦截 print-data 缓存兜底）
     //       ⑨ 教师搜索  → 跨标签页自动搜索注入（teacher.nwpu.edu.cn）
     //       ⑩ 顶层主页 / 研究生系统 → 延迟启动后台同步控制器（研究生系统另含培养方案增强）
     //   例外：/course-selection 选课助手（2.7）为历史遗留的独立 IIFE，
@@ -159,6 +161,12 @@
     // ============================================================
     // 0.1 统一视觉系统（设计令牌 + 组件覆盖）
     // 说明：只收敛颜色、字号、圆角、阴影与控件状态，不改布局和交互逻辑。
+    // 设计约束（去 AI 味四原则）：
+    //   ① 间距统一 4px 基准网格（8pt 网格半步长），禁用 9/13/14/22px 等随机值
+    //   ② 色彩去大面积渐变，仅保留主色纯色 + 柔和光晕（按钮/悬浮球投影）
+    //   ③ 图标统一 1.6px 线性描边 SVG，禁用 emoji 与混用描边
+    //   ④ 字体 system-ui 优先（Latin 用 Segoe UI/SF，中文回退雅黑/苹方），
+    //      字重仅 400/600 两档，数字统一等宽字体 + tabular-nums
     // 使用 html body 前缀提高权重，覆盖各功能模块后注入的同名样式。
     // ============================================================
     function injectUnifiedDesignSystem() {
@@ -204,8 +212,8 @@
             --gm-shadow-sm: 0 1px 2px rgba(15, 23, 42, .04), 0 2px 8px rgba(15, 23, 42, .04);
             --gm-shadow: 0 8px 24px rgba(15, 23, 42, .10);
             --gm-shadow-lg: 0 16px 40px rgba(15, 23, 42, .16);
-            --gm-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, system-ui, sans-serif;
-            --gm-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+            --gm-font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+            --gm-mono: "Cascadia Mono", "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
         }
 
         /* ---------- 遮罩与弹窗骨架 ---------- */
@@ -242,7 +250,7 @@
             border-bottom: 1px solid var(--gm-border) !important;
             background: #fff !important;
             height: auto !important;
-            min-height: 58px !important;
+            min-height: 56px !important;
         }
         html body .gm-modal-title,
         html body .gpa-modal-title,
@@ -263,9 +271,9 @@
         html body .gm-help-close,
         html body #gm-sync-close,
         html body #gm-panel-close {
-            width: 30px !important;
-            height: 30px !important;
-            min-width: 30px !important;
+            width: 32px !important;
+            height: 32px !important;
+            min-width: 32px !important;
             border: 0 !important;
             border-radius: 50% !important;
             background: transparent !important;
@@ -301,9 +309,9 @@
         html body .cancel-button,
         html body .gm-ps-btn,
         html body .semester-checkbox-container button {
-            min-height: 34px !important;
+            min-height: 32px !important;
             height: auto !important;
-            padding: 0 14px !important;
+            padding: 0 16px !important;
             border-radius: var(--gm-radius) !important;
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
@@ -387,17 +395,17 @@
         html body .gm-ps-input,
         html body .input-group input {
             height: 36px !important;
-            padding: 0 11px !important;
+            padding: 0 12px !important;
         }
         html body .gm-filter-select {
             height: 32px !important;
-            padding: 0 10px !important;
+            padding: 0 8px !important;
             font-size: 12px !important;
         }
         html body .gm-score-input {
             width: 68px !important;
-            height: 30px !important;
-            padding: 0 6px !important;
+            height: 32px !important;
+            padding: 0 8px !important;
             border-radius: var(--gm-radius-sm) !important;
             font-family: var(--gm-mono) !important;
             font-size: 12px !important;
@@ -405,7 +413,7 @@
         }
         html body #gm-semester-dd-trigger {
             height: 36px !important;
-            padding: 0 30px 0 10px !important;
+            padding: 0 32px 0 8px !important;
             font-size: 12.5px !important;
         }
         html body .gm-ps-input:focus,
@@ -428,7 +436,7 @@
         html body .gm-course-status-tag {
             display: inline-flex !important;
             align-items: center !important;
-            min-height: 22px !important;
+            min-height: 24px !important;
             height: auto !important;
             padding: 0 8px !important;
             border-radius: var(--gm-radius-sm) !important;
@@ -466,8 +474,8 @@
             color: var(--gm-warning-text) !important;
         }
         html body .gm-arc-badge {
-            min-height: 18px !important;
-            padding: 0 5px !important;
+            min-height: 16px !important;
+            padding: 0 4px !important;
             font-size: 10px !important;
             background: var(--gm-primary-light) !important;
             border-color: var(--gm-primary-border) !important;
@@ -476,7 +484,7 @@
         html body .gm-code-badge {
             display: inline-flex !important;
             align-items: center !important;
-            padding: 2px 6px !important;
+            padding: 2px 8px !important;
             border-radius: var(--gm-radius-sm) !important;
             background: var(--gm-fill-strong) !important;
             color: var(--gm-text-3) !important;
@@ -488,7 +496,7 @@
             color: var(--gm-primary-text) !important;
             background: var(--gm-primary-light) !important;
             border-radius: var(--gm-radius-sm) !important;
-            padding: 2px 6px !important;
+            padding: 2px 8px !important;
             font-size: 13px !important;
             font-weight: 400 !important;
         }
@@ -500,7 +508,7 @@
         html body .gm-hist-tag {
             display: inline-flex !important;
             align-items: center !important;
-            padding: 2px 6px !important;
+            padding: 2px 8px !important;
             border: 1px solid transparent !important;
             border-radius: 4px !important;
             font-family: var(--gm-font) !important;
@@ -522,8 +530,8 @@
         html body .gm-release-tag {
             display: inline-flex !important;
             align-items: center !important;
-            gap: 5px !important;
-            padding: 2px 7px !important;
+            gap: 4px !important;
+            padding: 2px 8px !important;
             border: 1px solid var(--gm-success-border) !important;
             border-radius: 4px !important;
             background: var(--gm-success-bg) !important;
@@ -536,8 +544,8 @@
         }
         html body .gm-release-tag::before {
             content: "" !important;
-            width: 5px !important;
-            height: 5px !important;
+            width: 4px !important;
+            height: 4px !important;
             border-radius: 50% !important;
             background: var(--gm-success) !important;
             flex: none !important;
@@ -557,16 +565,25 @@
             font-size: 11.5px !important;
             font-weight: 400 !important;
             border-bottom: 1px solid var(--gm-border) !important;
-            padding: 10px 12px !important;
+            padding: 8px 12px !important;
         }
         html body .gm-course-table td {
             color: var(--gm-text-2) !important;
             font-size: 13px !important;
             border-bottom: 1px solid var(--gm-border-light) !important;
-            padding: 11px 12px !important;
+            padding: 12px 12px !important;
         }
         html body .gm-course-table tr:hover td {
             background: var(--gm-fill) !important;
+        }
+        /* 数字做主角：表格与数值统一等宽数字，避免 Segoe/雅黑比例数字跳动 */
+        html body .gm-course-table td,
+        html body .gm-course-table th,
+        html body .gm-tc-val,
+        html body .gm-ps-item-id,
+        html body .gm-code-badge,
+        html body .gm-score-input {
+            font-variant-numeric: tabular-nums !important;
         }
         html body .gm-timetable {
             border: 1px solid var(--gm-border) !important;
@@ -606,7 +623,7 @@
             font-weight: 400 !important;
             color: var(--gm-text-3) !important;
             border-bottom-width: 2px !important;
-            padding: 12px 10px 10px !important;
+            padding: 12px 8px 8px !important;
         }
         html body .gm-tab-item.active {
             color: var(--gm-primary-text) !important;
@@ -634,14 +651,14 @@
             border-radius: var(--gm-radius-lg) !important;
             border: 1px solid var(--gm-border) !important;
             box-shadow: var(--gm-shadow-lg) !important;
-            padding: 6px !important;
+            padding: 8px !important;
             font-family: var(--gm-font) !important;
         }
         html body .gm-menu-group-title {
             font-family: var(--gm-font) !important;
             font-size: 11px !important;
             color: var(--gm-text-4) !important;
-            padding: 8px 10px 4px !important;
+            padding: 8px 8px 4px !important;
             margin-top: 4px !important;
             border-top: 1px solid var(--gm-border-light) !important;
             letter-spacing: .08em !important;
@@ -649,11 +666,11 @@
         }
         html body .gm-menu-item {
             font-family: var(--gm-font) !important;
-            padding: 9px 10px !important;
+            padding: 8px 8px !important;
             border-radius: var(--gm-radius) !important;
             color: var(--gm-text-2) !important;
             font-size: 13px !important;
-            gap: 9px !important;
+            gap: 8px !important;
             font-weight: 400 !important;
         }
         html body .gm-menu-item:hover:not(:disabled) {
@@ -675,7 +692,7 @@
         html body .gm-ps-list-container::-webkit-scrollbar,
         html body .gm-semester-list::-webkit-scrollbar,
         html body .gpa-modal-body::-webkit-scrollbar {
-            width: 6px !important;
+            width: 8px !important;
         }
         html body .gm-float-menu::-webkit-scrollbar-thumb,
         html body .gm-help-body::-webkit-scrollbar-thumb,
@@ -692,8 +709,8 @@
             width: min(420px, 92vw) !important;
         }
         html body .gm-dialog-body {
-            padding: 22px 24px 18px !important;
-            gap: 14px !important;
+            padding: 24px 24px 16px !important;
+            gap: 16px !important;
         }
         html body .gm-dialog-title {
             font-family: var(--gm-font) !important;
@@ -709,8 +726,8 @@
             line-height: 1.8 !important;
         }
         html body .gm-dialog-icon {
-            width: 38px !important;
-            height: 38px !important;
+            width: 40px !important;
+            height: 40px !important;
             border-radius: 50% !important;
             background: var(--gm-fill) !important;
             display: inline-flex !important;
@@ -719,7 +736,7 @@
         }
         html body .gm-dialog-footer {
             padding: 4px 24px 20px !important;
-            gap: 10px !important;
+            gap: 8px !important;
         }
 
         /* ---------- 友情链接 ---------- */
@@ -742,11 +759,11 @@
             font-size: 12.5px !important;
             font-weight: 400 !important;
             color: var(--gm-text-2) !important;
-            margin-bottom: 10px !important;
-            gap: 7px !important;
+            margin-bottom: 8px !important;
+            gap: 8px !important;
         }
         html body .gm-fl-grid {
-            gap: 10px !important;
+            gap: 8px !important;
         }
         html body .gm-fl-card {
             padding: 12px !important;
@@ -761,8 +778,8 @@
             transform: translateY(-2px) !important;
         }
         html body .gm-fl-icon-box {
-            width: 34px !important;
-            height: 34px !important;
+            width: 32px !important;
+            height: 32px !important;
             border-radius: var(--gm-radius) !important;
             flex: none !important;
         }
@@ -808,7 +825,7 @@
         html body .gm-btn-clear-all {
             min-height: 28px !important;
             height: auto !important;
-            padding: 0 10px !important;
+            padding: 0 8px !important;
             border-radius: var(--gm-radius-sm) !important;
             border: 1px solid var(--gm-danger-border) !important;
             background: var(--gm-danger-bg) !important;
@@ -823,7 +840,7 @@
         html body .gm-btn-unfollow {
             min-height: 28px !important;
             height: auto !important;
-            padding: 0 9px !important;
+            padding: 0 8px !important;
             border-radius: var(--gm-radius-sm) !important;
             border: 1px solid var(--gm-danger-border) !important;
             background: var(--gm-danger-bg) !important;
@@ -844,7 +861,7 @@
             background: var(--gm-fill) !important;
         }
         html body .gpa-modal-body {
-            padding: 22px 24px !important;
+            padding: 24px 24px !important;
             background: var(--gm-fill) !important;
         }
         html body .gpa-modal-grid {
@@ -876,7 +893,7 @@
             font-weight: 600;
         }
         html body .gpa-report-modal summary {
-            padding: 13px 16px !important;
+            padding: 12px 16px !important;
             font-size: 13px !important;
             color: var(--gm-text-1) !important;
         }
@@ -901,8 +918,8 @@
             background: #fff !important;
         }
         html body .calculate-btn {
-            min-height: 34px !important;
-            padding: 0 14px !important;
+            min-height: 32px !important;
+            padding: 0 16px !important;
             font-size: 13px !important;
         }
         html body .prediction-result {
@@ -934,7 +951,7 @@
         /* ---------- 导出学期面板 ---------- */
         html body .semester-checkbox-container {
             width: min(460px, 92vw) !important;
-            padding: 22px 24px !important;
+            padding: 24px 24px !important;
         }
         html body .semester-checkbox-container h3 {
             font-family: var(--gm-font) !important;
@@ -949,7 +966,7 @@
             margin-bottom: 16px !important;
         }
         html body .gm-semester-item {
-            padding: 9px 11px !important;
+            padding: 8px 12px !important;
             border-radius: var(--gm-radius) !important;
             border: 1px solid var(--gm-border) !important;
             background: #fff !important;
@@ -964,11 +981,11 @@
         html body .gm-semester-item input[type="checkbox"] {
             width: 16px !important;
             height: 16px !important;
-            margin-right: 9px !important;
+            margin-right: 8px !important;
         }
         html body .button-container {
             border-top: 1px solid var(--gm-border) !important;
-            padding-top: 14px !important;
+            padding-top: 16px !important;
             gap: 8px !important;
         }
 
@@ -979,7 +996,7 @@
             border-right: 1px solid var(--gm-border) !important;
         }
         html body .gm-ps-search-box {
-            padding: 14px !important;
+            padding: 16px !important;
             background: #fff !important;
             border-bottom: 1px solid var(--gm-border) !important;
             box-shadow: none !important;
@@ -994,7 +1011,7 @@
             border-radius: var(--gm-radius) !important;
         }
         html body .gm-ps-list-item {
-            padding: 13px 18px !important;
+            padding: 12px 16px !important;
             border-bottom: 1px solid var(--gm-border-light) !important;
             background: #fff !important;
         }
@@ -1005,7 +1022,7 @@
             background: var(--gm-primary-light) !important;
         }
         html body .gm-ps-list-item.active::before {
-            width: 3px !important;
+            width: 4px !important;
             background: var(--gm-primary) !important;
         }
         html body .gm-ps-item-name {
@@ -1026,7 +1043,7 @@
         }
         html body .gm-ps-card-header {
             height: 92px !important;
-            background: linear-gradient(135deg, var(--gm-primary), #60a5fa) !important;
+            background: var(--gm-primary) !important;
         }
         html body .gm-ps-avatar {
             width: 76px !important;
@@ -1037,7 +1054,7 @@
             box-shadow: var(--gm-shadow) !important;
         }
         html body .gm-ps-card-body {
-            padding: 46px 24px 22px !important;
+            padding: 48px 24px 24px !important;
         }
         html body .gm-ps-info-label {
             font-size: 11.5px !important;
@@ -1068,7 +1085,7 @@
             box-shadow: var(--gm-shadow-sm) !important;
         }
         html body .gm-course-header {
-            padding: 9px 14px !important;
+            padding: 8px 16px !important;
             background: var(--gm-primary-light) !important;
             border-bottom: 1px solid var(--gm-border) !important;
             color: var(--gm-primary-text) !important;
@@ -1079,7 +1096,7 @@
             font-weight: 400 !important;
         }
         html body .gm-teacher-row {
-            padding: 10px 14px !important;
+            padding: 8px 16px !important;
             border-bottom: 1px solid var(--gm-border-light) !important;
         }
         html body .gm-t-name {
@@ -1104,7 +1121,7 @@
             color: var(--gm-danger-text) !important;
         }
         html body .gm-modal-footer {
-            padding: 14px 24px !important;
+            padding: 16px 24px !important;
             border-top: 1px solid var(--gm-border) !important;
             background: #fff !important;
         }
@@ -1129,9 +1146,9 @@
             font-size: 14px !important;
             font-weight: 600 !important;
             color: var(--gm-text-1) !important;
-            padding-left: 10px !important;
+            padding-left: 8px !important;
             border-left: 4px solid var(--gm-primary) !important;
-            margin-bottom: 10px !important;
+            margin-bottom: 8px !important;
         }
         html body .gm-help-step {
             font-size: 12.5px !important;
@@ -1145,7 +1162,7 @@
 
         /* ---------- 课表悬浮窗 ---------- */
         html body .gm-schedule-box {
-            padding: 14px !important;
+            padding: 16px !important;
             border-radius: var(--gm-radius-lg) !important;
             border: 1px solid var(--gm-border) !important;
             box-shadow: var(--gm-shadow) !important;
@@ -1157,7 +1174,7 @@
             border: 1px solid var(--gm-warning-border) !important;
             border-radius: var(--gm-radius) !important;
             color: var(--gm-warning-text) !important;
-            padding: 8px 10px !important;
+            padding: 8px 8px !important;
             font-size: 12px !important;
         }
         html body .gm-sch-table {
@@ -1186,7 +1203,7 @@
             font-size: 11.5px !important;
         }
         html body .gm-schedule-btn {
-            min-height: 30px !important;
+            min-height: 32px !important;
             height: auto !important;
             padding: 0 12px !important;
             border-radius: var(--gm-radius) !important;
@@ -1202,7 +1219,7 @@
 
         /* ---------- 教材清单 ---------- */
         html body .gm-textbook-wrapper {
-            padding: 18px !important;
+            padding: 16px !important;
             box-shadow: var(--gm-shadow-sm) !important;
         }
         html body .gm-textbook-title {
@@ -1210,7 +1227,7 @@
             font-weight: 600 !important;
             color: var(--gm-text-1) !important;
             border-left: 4px solid var(--gm-primary) !important;
-            padding-left: 10px !important;
+            padding-left: 8px !important;
             margin-bottom: 12px !important;
         }
         html body .gm-textbook-table {
@@ -1245,7 +1262,7 @@
         html body .gm-online-btn {
             border-radius: var(--gm-radius-sm) !important;
             font-size: 11.5px !important;
-            padding: 3px 10px !important;
+            padding: 4px 8px !important;
             background: var(--gm-primary) !important;
         }
 
@@ -1295,7 +1312,7 @@
 
         /* ---------- Toast ---------- */
         html body .gm-arc-toast {
-            padding: 10px 16px !important;
+            padding: 8px 16px !important;
             border-radius: var(--gm-radius) !important;
             box-shadow: var(--gm-shadow) !important;
             font-family: var(--gm-font) !important;
@@ -1331,7 +1348,7 @@
             padding: 0 !important;
         }
         html body .gm-lesson-panel__header {
-            padding: 10px 12px !important;
+            padding: 8px 12px !important;
             background: var(--gm-fill) !important;
             border-bottom: 1px solid var(--gm-border) !important;
             border-radius: var(--gm-radius-lg) var(--gm-radius-lg) 0 0 !important;
@@ -1350,7 +1367,7 @@
         }
         html body .gm-semester-dd {
             position: relative !important;
-            margin-bottom: 10px !important;
+            margin-bottom: 8px !important;
         }
         html body .gm-semester-dd__trigger {
             display: flex !important;
@@ -1386,7 +1403,7 @@
         }
         html body .gm-semester-dd__item {
             height: 32px !important;
-            padding: 7px 8px !important;
+            padding: 8px 8px !important;
             border-radius: var(--gm-radius-sm) !important;
             font-family: var(--gm-font) !important;
             font-size: 12px !important;
@@ -1442,19 +1459,19 @@
             gap: 8px !important;
         }
         html body .gm-sync-modal-body {
-            padding: 20px 24px 22px !important;
+            padding: 20px 24px 24px !important;
         }
         html body .gm-sync-actions {
             display: flex !important;
             flex-direction: column !important;
-            gap: 10px !important;
+            gap: 8px !important;
         }
         html body .gm-sync-action {
             display: flex !important;
             align-items: center !important;
             gap: 12px !important;
             width: 100% !important;
-            padding: 12px 14px !important;
+            padding: 12px 16px !important;
             border: 1px solid var(--gm-border) !important;
             border-radius: var(--gm-radius) !important;
             background: var(--gm-fill) !important;
@@ -1495,14 +1512,14 @@
             color: var(--gm-warning-text) !important;
         }
         html body .gm-sync-archive {
-            margin-top: 18px !important;
+            margin-top: 16px !important;
             padding-top: 16px !important;
             border-top: 1px solid var(--gm-border) !important;
         }
         html body .gm-sync-archive__title {
             display: flex !important;
             align-items: center !important;
-            gap: 7px !important;
+            gap: 8px !important;
             font-family: var(--gm-font) !important;
             font-size: 13px !important;
             font-weight: 600 !important;
@@ -1512,13 +1529,13 @@
             display: flex !important;
             flex-direction: column !important;
             gap: 8px !important;
-            margin-top: 10px !important;
+            margin-top: 8px !important;
         }
         html body .gm-archive-slot {
             border: 1px solid var(--gm-border) !important;
             border-radius: var(--gm-radius) !important;
             background: var(--gm-fill) !important;
-            padding: 10px 12px !important;
+            padding: 8px 12px !important;
             transition: border-color .18s ease, background .18s ease !important;
         }
         html body .gm-archive-slot:hover {
@@ -1533,7 +1550,7 @@
             background: var(--gm-fill) !important;
             display: flex !important;
             align-items: center !important;
-            gap: 10px !important;
+            gap: 8px !important;
             color: var(--gm-text-3) !important;
             font-size: 12px !important;
         }
@@ -1561,7 +1578,7 @@
             white-space: nowrap !important;
         }
         html body .gm-archive-slot__meta {
-            margin-top: 5px !important;
+            margin-top: 4px !important;
             font-size: 11.5px !important;
             color: var(--gm-text-3) !important;
         }
@@ -1630,10 +1647,10 @@
     // --- 统一弹窗工具 GmDialog ---
     const GmDialog = (() => {
         const ICONS = {
-            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
-            warn: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#E6A23C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-            error: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
-            info: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+            warn: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#E6A23C" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+            error: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#F56C6C" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+            info: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
         };
         const THEME = { success: '#67C23A', warn: '#E6A23C', error: '#F56C6C', info: '#409EFF' };
 
@@ -1643,13 +1660,13 @@
             style.textContent = `
             .gm-dialog-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); z-index: 200000; display: flex; align-items: center; justify-content: center; animation: gmDialogFadeIn 0.2s ease-out; transition: opacity 0.18s; }
             @keyframes gmDialogFadeIn { from { opacity: 0; } to { opacity: 1; } }
-            .gm-dialog { background: #fff; border-radius: 12px; width: 420px; max-width: 90%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
-            .gm-dialog-body { display: flex; gap: 14px; padding: 22px 24px 18px; align-items: flex-start; }
+            .gm-dialog { background: #fff; border-radius: 12px; width: 420px; max-width: 90%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: var(--gm-font); }
+            .gm-dialog-body { display: flex; gap: 16px; padding: 24px 24px 16px; align-items: flex-start; }
             .gm-dialog-icon { flex-shrink: 0; margin-top: 2px; }
             .gm-dialog-text { font-size: 14px; color: #303133; line-height: 1.7; word-break: break-word; }
-            .gm-dialog-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-            .gm-dialog-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 4px 24px 20px; }
-            .gm-dialog-btn { padding: 8px 18px; border-radius: 6px; font-size: 14px; cursor: pointer; border: 1px solid #dcdfe6; background: #fff; color: #606266; transition: all 0.2s; }
+            .gm-dialog-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+            .gm-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 4px 24px 20px; }
+            .gm-dialog-btn { padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; border: 1px solid #dcdfe6; background: #fff; color: #606266; transition: all 0.2s; }
             .gm-dialog-btn:hover { border-color: #c0c4cc; color: #303133; }
             .gm-dialog-btn-primary { color: #fff; border: none; }
             .gm-dialog-btn-primary:hover { opacity: 0.85; color: #fff; }
@@ -1703,9 +1720,9 @@
         categories: [
             {
                 title: "友情链接快捷访问",
-                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
+                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>',
                 links: [
-                    { name: "湖畔资料", url: "http://nwpushare.cn", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5.2 8 4.5 5.5 4.5H5c-.8 0-1.5.7-1.5 1.5v6.5c0 .8.7 1.5 1.5 1.5h.5c2.5 0 4.8.7 6.5 2 1.7-1.3 4-2 6.5-2h.5c.8 0 1.5-.7 1.5-1.5V6c0-.8-.7-1.5-1.5-1.5h-.5C16 4.5 13.7 5.2 12 6.5z"></path><line x1="12" y1="6.5" x2="12" y2="16"></line><path d="M3.5 19.5c1.4 1 2.9 1 4.3 0s2.9-1 4.3 0 2.9 1 4.3 0 2.9-1 4.3 0"></path></svg>' },
+                    { name: "湖畔资料", url: "http://nwpushare.cn", desc: "西工大课程资料共享平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.5C10.3 5.2 8 4.5 5.5 4.5H5c-.8 0-1.5.7-1.5 1.5v6.5c0 .8.7 1.5 1.5 1.5h.5c2.5 0 4.8.7 6.5 2 1.7-1.3 4-2 6.5-2h.5c.8 0 1.5-.7 1.5-1.5V6c0-.8-.7-1.5-1.5-1.5h-.5C16 4.5 13.7 5.2 12 6.5z"></path><line x1="12" y1="6.5" x2="12" y2="16"></line><path d="M3.5 19.5c1.4 1 2.9 1 4.3 0s2.9-1 4.3 0 2.9 1 4.3 0 2.9-1 4.3 0"></path></svg>' },
                     { name: "瓜兵速成指南", url: "https://nwpumanual.angine.tech/", desc: "新生入学问题指南", bg: "#fdf6ec", color: "#E6A23C", svg: '<img src="data:image/png;base64,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" alt="">' },
                     { name: "翱翔助手", url: "https://github.com/Lorcas-Zephyr/aoxiang-assistant", desc: "更高效的手机App", bg: "#ecf5ff", color: "#2F80ED", svg: '<svg viewBox="0 0 108 108" fill="none"><path fill="#2F80ED" d="M54,6A48,48 0,1 0,54 102A48,48 0,1 0,54 6"/><path fill="#FFFFFF" d="M31,31h46v8H31zM31,47h31v8H31zM31,63h22v8H31z"/><path fill="#B9DEFF" d="M67,48h10v23H67z"/></svg>' },
                     { name: "瓜拼白车", url: "https://nwpu.codepix.top", desc: "瓜大人自己的在线免费拼车平台", bg: "#e8f1fb", color: "#004EA2", svg: '<svg viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" fill="#004EA2"/><path d="M143.659 195.051C148.947 192.473 153.174 188.348 155.687 183.31L176.915 141.608L200.441 95.3858C202.932 90.6315 203.735 85.2618 202.733 80.0506C201.8 75.1446 199.287 70.6155 195.528 67.0632C191.683 63.3665 186.71 60.8584 181.284 59.8794C175.858 58.9005 170.243 59.4982 165.2 61.5914L114.885 82.0646L69.5273 100.383C64.2418 102.471 59.7973 106.051 56.8206 110.617C53.8438 115.184 52.4851 120.506 52.9361 125.835C53.3639 130.987 55.5264 135.886 59.1164 139.834C63.0327 144.226 68.4897 147.191 74.5231 148.206L99.8811 153.006L104.225 177.225C105.167 182.884 108.227 188.056 112.865 191.827C117.038 195.302 122.288 197.457 127.857 197.981C133.325 198.535 138.842 197.512 143.659 195.051ZM121.612 174.313L115.98 143.401C115.767 142.223 115.173 141.132 114.279 140.273C113.384 139.414 112.231 138.828 110.971 138.592L78.01 132.352C76.0257 131.914 74.2418 130.9 72.9166 129.457C71.5914 128.014 70.7936 126.217 70.6389 124.326C70.4842 122.436 70.9805 120.549 72.056 118.94C73.1315 117.331 74.7304 116.083 76.621 115.376L121.98 96.976L172.427 76.5043C174.188 75.7668 176.151 75.5533 178.049 75.8928C179.947 76.2324 181.686 77.1086 183.03 78.4016C184.374 79.6946 185.257 81.3413 185.558 83.1169C185.859 84.8924 185.563 86.7101 184.711 88.3215L161.14 134.544L139.913 176.246C139.14 178.046 137.754 179.561 135.968 180.559C134.182 181.557 132.093 181.984 130.019 181.774C127.946 181.564 126.002 180.73 124.484 179.397C122.966 178.065 121.957 176.308 121.612 174.395L121.612 174.313Z" fill="white"/><path d="M124.046 120.104L141.851 103.924C143.533 102.412 145.793 101.584 148.135 101.623C150.476 101.661 152.706 102.563 154.335 104.13C155.964 105.697 156.858 107.801 156.821 109.979C156.783 112.156 155.817 114.229 154.135 115.741L136.33 131.921C134.648 133.434 132.387 134.262 130.046 134.223C127.705 134.184 125.474 133.282 123.845 131.715C122.217 130.148 121.323 128.044 121.36 125.867C121.398 123.689 122.364 121.616 124.046 120.104Z" fill="white"/></svg>' }
@@ -1713,15 +1730,15 @@
             },
             {
                 title: "校内网站快捷访问",
-                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
+                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#67C23A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
                 links: [
                     { name: "西北工业大学 WebVPN", url: "https://webvpn.nwpu.edu.cn/", desc: "校外免客户端访问校园网环境", bg: "#f0f9eb", color: "#67C23A", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAJk0lEQVR42p2XaZBVxRXH/6f73nffe7MxzKjIJgwCrkFQoiWIJlHcoqUp8iFqTJUbKo6iKTFVmpjEBRNF1LiAqFFTGpeRjMaIxBhHiQpKgmYQBUSQRGZEmGHmvXtv7ycfiFE0UuD51FXdff6/7urT5xzCbhh7C4gIH324mtZu3QwvJMAEGTxGNzdjyPCxABEDABHtks+vXLXgvdUYGjGtFKVGBRqhQPsysHckxRjFaLDMBALA29dHBJSFMM75dUS0oQT+UDJ/sBebzS9yjb1DbMHAloN3DnDvu+swQLB4n+NhKTBZEx3jiSZ4ohEMNDCRZPB/t306+rwLBjGBiFkwUmLuEsydMfOrCXPHHuCVWyBNq1RoHjPmM4C7V61HrYBcZ2hcCjrTEJ3iiUYGIPpUjsBBADkBFRCyAhEEwQKAZ8QmMIhQYkZdAEoMkvy5U0rwJ3HgF4vM9w0SYUnFs7nmkFGg65avRVFS88dezMpJnO1AewUAAggSvFkSd8aEtyShswBeHxNvCUSVwbU1qI0iz2Dq1VZ8nOVIBNUYz00KYhjAB9qAcQ50sGcaGoACtoP0lZnvHRbTdYa5ElWchIM4pmr5CsuQAiGLiN8oEC8sCX6pkdy6G+vH5i9tfRUTjpy8Sw/LLWl/fWZpAvZDGm9GYUjmcVgeaJplOsGAGkCY3st4ikHLoqoK0BQSG4RkMEv42YNid9s7JqqeURtw2sT9AAATdiNaoqNO+3Roec3yDbM+rtswLrFPd6rSdamnqywg+8hJBhDBBJAgBB8QGOyDX71RieoTJ47GE7sSmsx4a8MGDGluEgLEITDv2VD/2SsfcxgA4KxF79t6GXpDEGAwLDwYQETKgSLRG6wwAVQQCA2K5Q4iM/6wEgVCU87i2ERgze1La1bcfZLBcNmDGU+vRlH4FivMFQi8roHV3Vf/sVPfcMpnIXfX4hVYogQU68hRhIjYFCIoBiDIOLjMfBR0qHjNcIr32ZZLXPP0SgDAhY93Qli/xzYtbq9a+VifpjsvG9/T8F5XioUbayGNGdWrxPyeDDP6Fc/SLFuU5R0O8EGfx2PxSAQdhgbNCMpvc9X0E19NEUUMgHkzTNgSGE0GaDkVb4n3KsPCOQ++BVameRslcyzRGQCDKHwShLe5j1EkO7KP43kGdCzAiMgvYeE2+bDj/5bmARfny0p9VDc6UEAA/yuK0MMkIGqDxR6U9bD2670KsCrst0wNH9CTCnCumyo6mqO1ONMrJmlcRznYWb1ZnEnjWvqUnKcUHRtUgDB2YSnYmV191Dd3UrwDQK4lUh3v6TS3eBXA2nXOfX9CWuQAEcdltK+u02T9m8EEOI1RuZajvTINmUtu0Vae5Q0LaV1Hic30SpXWlKxt6VfRPUqLqV4HJmPbClZfUqnypkfOPQQ05MAdAJSRMIYOdhqDgwmBjV/2/cZ/4qYfHApx7ff2x761GsL6V1mH3Gk0aEUnp7b0a2Pl2V6zENZ2lFhPr1awJjFqZF8ezcu3i4OMfSq2qjX4pGvvhAZe9du3B935yGK69fdLAAAXzF2C8/WjZDWd4A0nrH2XMHZ5wZntIQsAZTgIH5bDiJUhyIkGciYIRYBFRK4jic0FFRWvrRF2ZL+P51mI48AMSbYtkqZV+ag7ztIDP6wU7iAKjT2FxvO0wz8AoD+PcT9O38cBUwMYgvzS+lJ1nQoJsP3HBQaVgRdWDdgqrHsumACvUecVYjK2I/FqelqVa0tOtfTn0Tyt5NSgAsiYtsipVp3Jbsr1/qmO7s1y8e08x0FKhVGZYlz0q79ia1aGNvJEp2lUMN6Rdc9s7BlgmuN8x2w47WevQQocUtWF5wKLvaVwHUWppxtfWFOWdkTmC/MsR8eDAUmuLZG61bqoWwSzvxWlBQHRJCKEgnQPDCibHxtH/Sb3EBQGZlzzjOdokiTXWZeoE5hp02O/mPzZDQBAbWQxorGvUzr7HBm9VNr0QpXJNUWvR1SyeJ7K5fFeMWBMW+Tz1jwV3SHL91MmuddqOSno4IUzD5RFflU1RX+kFLor9chV4XSrxESvA2Dd42+u3WdTSbr/Xw9Mu2Ixikk0NlcGLtSsjkUYmdpkng3RVACQZNviSLU6V+gmp8Z4Ub4vUHwUAB9L+2BtSV9pvextnzMFp1zyMgSF4XkoPRNYjpPCv1dTUCcFpvXtc4/+n6b4PEDbrcfD9W5enaX1q8n4Ef3V+G6dy6lBM2DMk8Jnrboqu0OWjjG2uMCZ6Kig2QtnHihSdmWeUm/7nCmYNuPPaIq3RrmKL3NKjAs6eGHt/I7lQ9Y3FN0OISq+mFwaGwfg8JZNkVLipzqXJ3gdwFa3SZ9ealLZHfJ0jDWlBc5EU7wOgay+v8DZrLwqe5+96xhc/vNF+GBTPbp6Gk82uTjHawZZ+5cE6uFJYzfiodnf2TlAbW0dbnm42QnmF2BcBdYsjEJ+qcqibpdlo42tme9MPCXoEMjpBwtIf6Iz2vb8A9/Cpde0YcXKAvYoVQ5SeXS90zSAje2SQd/Q0xv3jNrLfCmbfgng5qsn4+TJBnUF3Z7I9MIY+UyTii7O0rHOlhd4HR3jdQhw+qGIK1eqnHpH1rwC5kvwzqo6FIXeO8viW6wSB7HxWnoz+6aL2pc0lTPcdv2Ju14Vc88QoPEjDD94EUYMdQe4UJ4fKJlMYC+EeSgupFeGEPcMK72CR5+YjUnHtYNg6lg2zfWcnAswosgsaKyvzDQuzhY/efLuleUAcO7Fz6KuRiV/f7tugdKlHwIEIvtaFPVNY5Zdr794KgDgiClPgmDqPDX/klGcAVAspVlULmfnOi+6Xln03a/UEDsDKCUJbru5rJOI7ydv13od4JQ4yFTLP4q9Lh45+WkcOvFJkLcN1gy80evkEq8Rs9VLI6SXp/1R1+C613daUcmdTb6x9Hc477xT0fb4oA+HDetd5a04IlgxmIOYbLUoeVNZKkXc5Gz9rd4n57BDBNbLBSrnK1W/qhYd+NPiG79eZ/R5O+20BWhvPxqHf/Pdw1WW3MMhHg+wFcItZEYjIz4ODCJh3hRR9fzgBr6d1PwNbyy79uu3Zl+0o464FVs2H4hC0jc++Nr5wccTQbS9NSOGlObFQjG9TGDwOxZtWPH2bbvkV+4qwMZ/L8aYkUNR7RvfXVuz7WVvsI/XYjQHdkLoR+NCtdXqZN03xq/H8y9cs8slPGE37YbZLXj4jtmoG2CbdVqeBaJtxdrsN8xJZfmqabvrbvcBPrXDD7gTdfVJBIC19n7Jigu/lp//ABqUkmhRCl8DAAAAAElFTkSuQmCC" alt="">' },
-                    { name: "NOJ", url: "https://noj.nwpu.edu.cn/cpbox/", desc: "程序设计基础理论/实验 NOJ平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>' }
+                    { name: "NOJ", url: "http://10.12.13.248/cpbox/", desc: "程序设计基础理论/实验 NOJ平台", bg: "#ecf5ff", color: "#409EFF", svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>' }
                 ]
             },
             {
                 title: "网课网站快速访问",
-                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
+                titleIcon: '<svg viewBox="0 0 24 24" width="18" height="18" stroke="#F56C6C" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>',
                 links: [
                     { name: "学堂在线", url: "https://bknwpu.yuketang.cn/", desc: "西工大专属雨课堂在线学习主页", bg: "#fef0f0", color: "#F56C6C", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAEqklEQVR42u2by28bRRjAfzuz602a96tOghM1L6IGYh5qiVohpWoV1JYD4oAEBw4IESQuOSAhwQnEPwAXxInSYyVKK5CQKBQONIc+adM0VRuURnm7TZpH3Ti2d3c4JI4a4riKg5M4u59kybPSePz9vm++me/bGU0ppQCiFpzvi3NxwGJi1sF22FEiBVQWCdrqdY60GJj64nNNKaXuzzl8/VuU0NwO03oN8RcKujpMdhcKRNTCVcoDhJYMHrVAnO+Lu0r5JyGc74sjLg5YuFUuDliIiVnHtQAmZh30taJ9VbHgnTYfuwsEPSMWpy7FtvXKULJLo8kvafILGv2SQIlgJqI48VeUvjE7aR/bAX2tH/zwkEmgRABweK9Bf8jh8r3tM112+TT2VkuCAUlzlaQ8X0sK5YN2k49PzeOsYbw1ASSUT0hFwcoBfDq8e9AkGJCE5hTfX4gyNpNZF3mmRBAMSII1kobdEqE9vU9BjkZRrsb0Y7U+AE+T460+DjQsdq+v0Og8ZPL52cj/rnRlkWBfnaStTqeqWKS3CUoBKm0AgVKR0mM2IkW5GgcbdfbX6dSWiYx6lb5d5rSmQUu1pL1Z58UaHSE2Z9yMAmiplhxtNbAd+KUnTn9odTQ2JHQ8Z9DebFCWr206+IwBqCjQ6OrIQS5ZsrlS8unpeWbnVwaj9141eaV+6xwxY47W5JfLyidWjbry1cPt27O1s1Bkck6vepbsDwh2JoBsEQ9Auh0dpf7TdhmAK4Mrl7Srg9mZVqcdgi8NWNgOS7mAw++34u4CkLB6tlreC4IeAA/AxgGYOjxbKSnN07IWgL6RQsUnx3IozNVwFJzsjtLdb7nHA462GhTmLlpeaPDWfp+7pkC+qaVsuz4IxpPMBstxEYDeUZuHT1RiQ3MOd8bt7AmCI9POikLn/bn1ZTvzMcWXP0U40KCjgO5+i5idRavAt39GebvNR0WBRu+Izd9D64/wjxYU57Z5jqCnem/21bkFbyPkAdjhktGS7P46nWOtBo6Cn6/HuDFsZ5cHlORpBEoEucb6NznVxYLOdpPaMsGecsFHh3O25MVH2h7w5ss+Xn/BACBmwxdnI+s6SlNXIVaUxqWA2lLBVNjODg947Xlj+btPQrBGuisIGjJ121sFPAAeAA+AB8AD4AHIClmw0gAwOOmsSo+zUQYnHcILav1b4W/+WOCNl3yUF2j0jdpcH7KzSvHpecXNYZsz12Lp5QIPHytOXIiSquSVqr3ZMhVW3JmwFz/jNpNhldl0+NfeOMEaSb6poYAfr8Y2VWHLgbsTNjdHbHqG7bTvPKQNYHTa4bMfIjT6BeMzigePMh8jInHFjSGbq4MWfeMO0bja2oLIfEzRk+EiR0Lpy/csbo3ZWHaWVITGk5wcDyUprc9F1PIrtoQo4PaYzYW7FteHMltOzxiAgQcOp6/EOB40UMCZa/Gkx+lPdkfpbDcxDY2psKK7P073PxZT4c0Jqtr734W3/HyXT4c8c+0z/ez00+IxC2LW1thBSBdnA1KAqCxyL4HKIoFoq9ddC6CtXkccaTHwF7rPC/yFgiMtBsLUoavDdBWExOVpU1+6PQ7uvT7/LwgCuorx9strAAAAAElFTkSuQmCC" alt="">' },
                     { name: "中国大学 MOOC 学校云", url: "https://www.icourse163.org/spoc/schoolcloud/index.htm", desc: "国家精品课程与SPOC在线学习平台", bg: "#f0f9eb", color: "#67C23A", svg: '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAADsklEQVR42u2bz4sTZxjHP5NsdrO/ctB2ha7rquAqIq0KRYoWx0OtF0Hn5smTeB3/DC9FQRSZQwstCC0ulhbR7aXSWh0P7mDLuv4imqw/kk2su9ndzI9MpoeZWLXGLWqS2cz7hZdMCMzM85nnfd53nueJ5HkeUVaMiEsAEAAEgGhLOjS6zQYeAlPByAIZYBK4A2Q0RffaGcBixpnAbeAvwACuA+Oaoj+NCoB6SgN/AL8DvwETS9FT3gXAqyoCvwAXgDFN0R9HDcCrug78AJzTFH0yigBe1J/At8B3YfOMZgGoqQpcBE4C5zVFr0YNwIu6D5wATmuKPteKG9h87FeplQBqegYcB45piv7sPRsYA4aAEWADsCr4vhIYBAbDAKCmGeAo8JWm6NZbGLsM2ApsCcYmYB2QDOsUqKd7wBFN0X96k+sCG4HPgR3AdmD1UosBi+lH4LCm6LnA6I+A3cAe4Atg2VIPgovvrEqrZzPFXZcqsQ2DgXu/d3WEzeg58wPST7ZQnEnh2Faqszu2tyfVuOuFAoBHjEx+K9npYcoLtfhnNeXaLQXguN3cym4n/zSF69pNM7rlACynn5vZHRT+7sKrVgC7ZQ+hqQBct4uJrEyukMTzXKDS8unXNADp3KekH67EdR3ADU3QbTiAeXM543d3Ui7bgBO6pbahAKYKnzD5YA1e1YYoZoWnCmuCIIdIiwsAAoAAIAAIAAKAACAACAACQPhehj7GLxQM46eW1+Pn00eARLsDkOr9cGh0WzwAsRm/0FD7/PD/nvzq5D5KpXd7GersXkFPaqT5AN4AZhi/EFErSGyqN5XaEsBrgKSAzwAZ+DLwkugAeA2QgQDEbv3W/gOzs048UgB4uYb3jevMHXSsIo5VxK3Mhw5Aw3OC8UQf8UQfyb5hqq6FbeZxrAKu05KWgNamxWPxLpK9QyR7h6i6JrY5jW3mqFbK0QDwMozkcxgVp4RdzuGY03heQ3KINn6v4x38BtAHwciGojbYkeinI9GP178WxypgLzym4sy+7enywDh+U6cRHN81VNkNfXVYkmJ0JgfoTA7gVuaxFh4hSdJiTVc3+Ldh87KhypklXR5/Hjw7eulJreM/hWT/iV4ALgFXDFUutVV/QB2XvgiMAWOGKufbukEikAGMAj8DhqHKXls3SAS6BnwPjBqqnG77ZTDQBHAGOGOo8r2o7ANmAqO/NlT5WpR2gpeBU8BZQ5XNqPQHzAGngZOGKt8IZUZI/HMUkRUWAAQAASC6+gcsCmJ9lr5ltQAAAABJRU5ErkJggg==" alt="">' },
@@ -1738,20 +1755,20 @@
             style.textContent = `
             .gm-fl-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); z-index: 100005; display: flex; justify-content: center; align-items: center; animation: gmLinkFadeIn 0.2s ease-out; }
             @keyframes gmLinkFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-            .gm-fl-modal { background: #f5f7fa; border-radius: 12px; width: 720px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
-            .gm-fl-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; color: #303133; }
-            .gm-fl-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px; }
+            .gm-fl-modal { background: #f5f7fa; border-radius: 12px; width: 720px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); overflow: hidden; display: flex; flex-direction: column; font-family: var(--gm-font); }
+            .gm-fl-header { padding: 16px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; color: #303133; }
+            .gm-fl-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 8px; }
             .gm-fl-close { cursor: pointer; color: #909399; font-size: 26px; line-height: 1; user-select: none; transition: color 0.2s; }
             .gm-fl-close:hover { color: #f56c6c; }
             .gm-fl-body { padding: 24px; max-height: 65vh; overflow-y: auto; }
             .gm-fl-category { margin-bottom: 24px; }
-            .gm-fl-cat-title { font-size: 14px; font-weight: 400; color: #606266; margin-bottom: 14px; display:flex; align-items:center; gap:8px;}
-            .gm-fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-            .gm-fl-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 14px; text-decoration: none; display: flex; align-items: center; gap: 14px; transition: all 0.25s; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+            .gm-fl-cat-title { font-size: 14px; font-weight: 400; color: #606266; margin-bottom: 16px; display:flex; align-items:center; gap:8px;}
+            .gm-fl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+            .gm-fl-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 16px; text-decoration: none; display: flex; align-items: center; gap: 16px; transition: all 0.25s; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
             .gm-fl-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(64,158,255,0.10); border-color: #c6e2ff; }
             .gm-fl-icon-box { width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
             .gm-fl-icon-box svg { width: 20px; height: 20px; }
-            .gm-fl-icon-box img { width: 22px; height: 22px; object-fit: contain; border-radius: 4px; }
+            .gm-fl-icon-box img { width: 24px; height: 24px; object-fit: contain; border-radius: 4px; }
             .gm-fl-info { flex: 1; min-width: 0; }
             .gm-fl-name { font-size: 14px; font-weight: 400; color: #303133; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
             .gm-fl-arrow { font-size: 12px; color: #c0c4cc; transition: transform 0.2s, color 0.2s; }
@@ -1773,7 +1790,7 @@
                         <a href="${link.url}" target="_blank" class="gm-fl-card">
                             <div class="gm-fl-icon-box" style="background:${link.bg}; color:${link.color};">${link.svg}</div>
                             <div class="gm-fl-info">
-                                <div class="gm-fl-name">${link.name} <span class="gm-fl-arrow"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span></div>
+                                <div class="gm-fl-name">${link.name} <span class="gm-fl-arrow"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span></div>
                                 <div class="gm-fl-desc" title="${link.desc}">${link.desc}</div>
                             </div>
                         </a>
@@ -1786,7 +1803,7 @@
             <div class="gm-fl-modal" onclick="event.stopPropagation()">
                 <div class="gm-fl-header">
                     <div class="gm-fl-title">
-                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
                         常用链接访问
                     </div>
                     <span class="gm-fl-close" onclick="document.getElementById('gm-friendly-links-modal').style.display='none'">&times;</span>
@@ -1803,7 +1820,7 @@
     // 更新源配置：Gitee 主源 + GitHub 副源
     const UPDATE_SOURCES = {
         GITEE_REPO: 'leamloli/aoxiang-jwxt-enhance',
-        GITEE_BRANCH: 'master',
+        GITEE_BRANCH: 'main',
         GITHUB_REPO: 'zengzoxiong/aoxiang-jwxt-enhance',
         GITHUB_BRANCH: 'main',
         USER_FILE: 'aoxiang-jwxt-enhance.user.js',
@@ -1878,34 +1895,34 @@
             overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(3px); animation: gmFadeIn 0.2s;';
 
             const modal = document.createElement('div');
-            modal.style.cssText = 'background:#fff; width:440px; padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2); font-family:"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; text-align:center; position:relative;';
+            modal.style.cssText = 'background:#fff; width:440px; padding:24px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.2); font-family: var(--gm-font); text-align:center; position:relative;';
 
             modal.innerHTML = `
-            <h3 style="margin:0 0 15px 0; color:#303133; font-size:18px; display:flex; align-items:center; justify-content:center; gap:8px;">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <h3 style="margin:0 0 16px 0; color:#303133; font-size:18px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                 脚本更新指引
             </h3>
             <p style="color:#606266; font-size:14px; margin-bottom:20px; line-height:1.6; text-align:left;">
                 点击下方按钮可从<b>Gitee / GitHub</b>下载最新版脚本，<br>下载后<b>拖拽到当前浏览器的油猴页面</b>中完成更新：
             </p>
             <div style="display:flex; flex-direction:column; gap:12px;">
-                <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:400; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <button id="gm-update-btn-proxy" style="background:#409EFF; color:#fff; border:none; padding:12px; border-radius:6px; font-size:14px; cursor:pointer; font-weight:400; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                     下载最新版代码
                 </button>
-                <div id="gm-update-tip" style="font-size:13px; color:#E6A23C; display:none; text-align:left; background:#fdf6ec; padding:10px; border-radius:6px; border:1px solid #faecd8; line-height:1.5;">
+                <div id="gm-update-tip" style="font-size:13px; color:#E6A23C; display:none; text-align:left; background:#fdf6ec; padding:8px; border-radius:6px; border:1px solid #faecd8; line-height:1.5;">
                     <div style="display:flex; align-items:center; margin-bottom:4px; font-weight:400; color:#67C23A;">
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>代码下载成功！
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="#67C23A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>代码下载成功！
                     </div>
                     请在浏览器的下载列表中找到刚刚下载的<b>“aoxiang-jwxt-enhance.user.js”</b>，将其<b>拖拽到当前浏览器的油猴页面中</b>，即可完成更新！
                 </div>
 
-                <div style="display:flex; gap:10px; margin-top:5px;">
-                    <button id="gm-update-btn-direct" style="flex:1; background:#f4f4f5; color:#606266; border:1px solid #dcdfe6; padding:10px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:6px;">
-                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <div style="display:flex; gap:8px; margin-top:4px;">
+                    <button id="gm-update-btn-direct" style="flex:1; background:#f4f4f5; color:#606266; border:1px solid #dcdfe6; padding:8px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                         访问 GitHub 仓库
                     </button>
-                    <button id="gm-update-btn-close" style="flex:1; background:#fff; color:#909399; border:1px solid #e4e7ed; padding:10px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s;">
+                    <button id="gm-update-btn-close" style="flex:1; background:#fff; color:#909399; border:1px solid #e4e7ed; padding:8px; border-radius:6px; font-size:13px; cursor:pointer; transition:all 0.2s;">
                         稍后更新
                     </button>
                 </div>
@@ -1925,7 +1942,7 @@
             const tipBox = document.getElementById('gm-update-tip');
 
             proxyBtn.onclick = () => {
-                proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="gm-spin" style="margin-right:6px;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>正在拉取代码，请稍候...';
+                proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" class="gm-spin" style="margin-right:8px;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>正在拉取代码，请稍候...';
 
                 // 等待按钮旋转动画
                 if (!document.getElementById('gm-spin-style')) {
@@ -1945,7 +1962,7 @@
 
                 const downloadFrom = (index) => {
                     if (index >= scriptUrls.length) {
-                        proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>拉取失败，请检查网络后重试';
+                        proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>拉取失败，请检查网络后重试';
                         proxyBtn.style.background = "#F56C6C";
                         proxyBtn.disabled = false;
                         proxyBtn.style.opacity = '1';
@@ -1967,7 +1984,7 @@
                                 document.body.removeChild(a);
                                 URL.revokeObjectURL(url);
 
-                                proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>下载完成！请按下方提示操作';
+                                proxyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>下载完成！请按下方提示操作';
                                 proxyBtn.style.background = "#67C23A";
                                 tipBox.style.display = "block";
                             } else {
@@ -2398,7 +2415,7 @@
             .gm-float-menu {
                 position: fixed; width: 230px !important; background-color: #fff; border-radius: 8px;
                 box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 100000;
-                display: none; flex-direction: column; padding: 6px 0;
+                display: none; flex-direction: column; padding: 8px 0;
                 opacity: 0; transform: translateY(10px); transition: opacity 0.2s, transform 0.2s;
                 border: 1px solid #ebeef5; box-sizing: border-box !important;
                 max-height: 85vh; overflow-y: auto;
@@ -2406,42 +2423,42 @@
             .gm-float-menu.show { display: flex; opacity: 1; transform: translateY(0); }
 
             /* 滚动条美化 */
-            .gm-float-menu::-webkit-scrollbar { width: 5px; }
+            .gm-float-menu::-webkit-scrollbar { width: 4px; }
             .gm-float-menu::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
 
            /* 分组标题 */
             .gm-menu-group-title {
-                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif !important;
-                font-size: 12px !important; color: #909399 !important; padding: 10px 18px 4px !important;
+                font-family: var(--gm-font) !important;
+                font-size: 12px !important; color: #909399 !important; padding: 8px 16px 4px !important;
                 margin-top: 4px !important; border-top: 1px solid #f0f2f5 !important;
                 font-weight: 400 !important; pointer-events: none !important; letter-spacing: 1px !important;
             }
-            .gm-menu-group-title:first-child { margin-top: 0 !important; border-top: none !important; padding-top: 6px !important; }
+            .gm-menu-group-title:first-child { margin-top: 0 !important; border-top: none !important; padding-top: 8px !important; }
 
             /* 菜单项 */
             .gm-menu-item {
-                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif !important;
-                padding: 10px 18px !important;
+                font-family: var(--gm-font) !important;
+                padding: 8px 16px !important;
                 cursor: pointer !important; color: #444 !important; font-size: 14px !important; text-align: left !important;
                 background: transparent !important; border: none !important;
                 border-radius: 0 !important; width: 100% !important; margin: 0 !important;
                 transition: background 0.15s, color 0.15s !important;
-                display: flex !important; align-items: center !important; gap: 10px !important;
+                display: flex !important; align-items: center !important; gap: 8px !important;
                 box-sizing: border-box !important; line-height: 1.5 !important; font-weight: normal !important;
             }
             .gm-menu-item:hover:not(:disabled) { background-color: #f0f7ff !important; color: #409EFF !important; }
             .gm-menu-item:disabled { cursor: not-allowed; color: #c0c4cc !important; }
 
             .gm-view-main { display: flex; flex-direction: column; width: 100%; }
-            .gm-badge { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background: #ff4d4f; border-radius: 50%; display: none; border: 2px solid #fff;}
-            .gm-icon { width: 18px; text-align: center; display: inline-block; font-weight: bold; flex-shrink: 0; font-size: 15px; }
+            .gm-badge { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #ff4d4f; border-radius: 50%; display: none; border: 2px solid #fff;}
+            .gm-icon { width: 16px; text-align: center; display: inline-block; font-weight: bold; flex-shrink: 0; font-size: 15px; }
         `;
             document.head.appendChild(style);
         }
 
         floatBall = document.createElement('div');
         floatBall.className = 'gm-float-ball';
-        floatBall.innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><div class="gm-badge"></div>';
+        floatBall.innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg><div class="gm-badge"></div>';
         floatBall.title = "翱翔教务功能增强设置";
         document.body.appendChild(floatBall);
 
@@ -2455,28 +2472,28 @@
         if (isEcampus) {
             mainView.innerHTML = `
             <div class="gm-menu-group-title">快捷工具</div>
-            <button class="gm-menu-item" id="gm-btn-person-search"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span> 人员信息检索</button>
-            <button class="gm-menu-item" id="gm-btn-links"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></span> 常用链接访问</button>
+            <button class="gm-menu-item" id="gm-btn-person-search"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span> 人员信息检索</button>
+            <button class="gm-menu-item" id="gm-btn-links"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></span> 常用链接访问</button>
 
             <div class="gm-menu-group-title">系统设置</div>
-            <button class="gm-menu-item" id="gm-btn-update"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg></span> <span id="gm-update-text">检查版本更新</span></button>
+            <button class="gm-menu-item" id="gm-btn-update"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg></span> <span id="gm-update-text">检查版本更新</span></button>
         `;
         } else {
             mainView.innerHTML = `
             <div class="gm-menu-group-title">成绩与学业分析</div>
-            <button class="gm-menu-item" id="gm-btn-gpa" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> GPA综合分析</button>
-            <button class="gm-menu-item" id="gm-btn-export" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></span> 导出成绩与排名</button>
+            <button class="gm-menu-item" id="gm-btn-gpa" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> GPA综合分析</button>
+            <button class="gm-menu-item" id="gm-btn-export" disabled><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></span> 导出成绩与排名</button>
 
             <div class="gm-menu-group-title">课程助手</div>
-            <button class="gm-menu-item" id="gm-btn-follow"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 课程关注列表</button>
-            <button class="gm-menu-item" id="gm-btn-sync-course"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-2 4 4 2-2h4"></path></svg></span> 同步最新选课数据</button>
-            <button class="gm-menu-item" id="gm-btn-eval-jump"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg></span> 一键自动评教</button>
+            <button class="gm-menu-item" id="gm-btn-follow"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span> 课程关注列表</button>
+            <button class="gm-menu-item" id="gm-btn-sync-course"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l2-2 4 4 2-2h4"></path></svg></span> 同步最新选课数据</button>
+            <button class="gm-menu-item" id="gm-btn-eval-jump"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="14 2 18 6 7 17 3 17 3 13 14 2"></polygon><line x1="3" y1="22" x2="21" y2="22"></line></svg></span> 一键自动评教</button>
 
             <div class="gm-menu-group-title">偏好与系统设置</div>
             <button class="gm-menu-item" id="gm-chk-portrait-btn"><span class="gm-icon" id="icon-portrait"></span> 启用学生画像增强</button>
             <button class="gm-menu-item" id="gm-chk-watch-btn"><span class="gm-icon" id="icon-watch"></span> 启用选课辅助功能</button>
-            <button class="gm-menu-item" id="gm-btn-help"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> 脚本使用说明</button>
-            <button class="gm-menu-item" id="gm-btn-update"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg></span> <span id="gm-update-text">检查版本更新</span></button>
+            <button class="gm-menu-item" id="gm-btn-help"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> 脚本使用说明</button>
+            <button class="gm-menu-item" id="gm-btn-update"><span class="gm-icon"><svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg></span> <span id="gm-update-text">检查版本更新</span></button>
         `;
         }
 
@@ -2514,8 +2531,8 @@
             const updateToggleUI = () => {
                 const isPortrait = ConfigManager.enablePortraitEnhancement;
                 const isWatch = ConfigManager.enableCourseWatch;
-                const svgChecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>';
-                const svgUnchecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
+                const svgChecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>';
+                const svgUnchecked = '<svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>';
                 document.getElementById('icon-portrait').innerHTML = isPortrait ? svgChecked : svgUnchecked;
                 document.getElementById('icon-watch').innerHTML = isWatch ? svgChecked : svgUnchecked;
 
@@ -2668,11 +2685,11 @@
         overlay.id = 'gm-sync-overlay';
         overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
         overlay.innerHTML = `
-            <div style="font-size:24px; font-weight:600; margin-bottom:15px;">正在同步选课数据...</div>
-            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">正在寻找最新选课学期...</div>
-            <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
+            <div style="font-size:24px; font-weight:600; margin-bottom:16px;">正在同步选课数据...</div>
+            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:8px; color:#ffeb3b;">正在寻找最新选课学期...</div>
+            <div id="gm-overlay-status" style="font-size:16px; margin-bottom:8px; color:#ddd;">正在初始化...</div>
             <div style="font-size:18px;">已获取: <span id="gm-sync-count" style="color:#4facfe; font-weight:600;">0</span> 条</div>
-            <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
+            <div style="margin-top:32px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
         `;
         document.body.appendChild(overlay);
 
@@ -2861,14 +2878,14 @@
         STORAGE_KEY: 'jwxt_sync_archives_v1',
         SLOT_COUNT: 3,
         ICONS: {
-            archive: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>',
-            box: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#c0c4cc" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
-            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+            archive: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>',
+            box: '<svg viewBox="0 0 24 24" width="16" height="16" stroke="#c0c4cc" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>',
+            success: '<svg viewBox="0 0 24 24" width="22" height="22" stroke="#67C23A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
             // 存档行右侧操作图标（颜色由按钮 style 控制，均为 currentColor）
-            applyIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>',
-            exportIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
-            renameIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>',
-            removeIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>'
+            applyIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>',
+            exportIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>',
+            renameIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>',
+            removeIcon: '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>'
         },
 
         load() {
@@ -3060,10 +3077,10 @@
             if (document.getElementById('gm-archive-style')) return;
             const style = getOrCreateStyleEl('gm-archive-style');
             style.textContent = `
-            .gm-arc-btn { width:26px; height:26px; border-radius:6px; border:none; background:transparent; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; transition:all .15s; flex-shrink:0; }
+            .gm-arc-btn { width:24px; height:24px; border-radius:6px; border:none; background:transparent; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; padding:0; transition:all .15s; flex-shrink:0; }
             .gm-arc-btn:hover { background:rgba(64,158,255,.12); }
             .gm-arc-btn[disabled] { color:#c0c4cc !important; cursor:not-allowed; background:transparent !important; }
-            .gm-arc-badge { font-size:10px; color:#409EFF; background:#ecf5ff; border:1px solid #d9ecff; border-radius:4px; padding:0 5px; line-height:16px; white-space:nowrap; }
+            .gm-arc-badge { font-size:10px; color:#409EFF; background:#ecf5ff; border:1px solid #d9ecff; border-radius:4px; padding:0 4px; line-height:16px; white-space:nowrap; }
         `;
             document.head.appendChild(style);
         },
@@ -3143,15 +3160,15 @@
             const overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:100035;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);';
             overlay.innerHTML = `
-            <div style="background:#fff;border-radius:12px;width:360px;max-width:90%;padding:20px 22px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif;">
+            <div style="background:#fff;border-radius:12px;width:360px;max-width:90%;padding:20px 24px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:var(--gm-font);">
                 <b style="font-size:15px;color:#303133;display:block;margin-bottom:12px;">重命名存档（槽位 ${index + 1}）</b>
                 <input id="gm-archive-rename-input" type="text" maxlength="40" value="${esc(curName)}"
-                    style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:13px;color:#303133;outline:none;"
+                    style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:13px;color:#303133;outline:none;"
                     placeholder="输入新的存档名称">
-                <div style="font-size:12px;color:#909399;margin-top:6px;">留空恢复为自动命名</div>
-                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
-                    <button id="gm-archive-rename-cancel" style="padding:7px 16px;border-radius:6px;border:1px solid #dcdfe6;background:#fff;color:#606266;font-size:13px;cursor:pointer;">取消</button>
-                    <button id="gm-archive-rename-ok" style="padding:7px 16px;border-radius:6px;border:none;background:#409EFF;color:#fff;font-size:13px;cursor:pointer;">确定</button>
+                <div style="font-size:12px;color:#909399;margin-top:8px;">留空恢复为自动命名</div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                    <button id="gm-archive-rename-cancel" style="padding:8px 16px;border-radius:6px;border:1px solid #dcdfe6;background:#fff;color:#606266;font-size:13px;cursor:pointer;">取消</button>
+                    <button id="gm-archive-rename-ok" style="padding:8px 16px;border-radius:6px;border:none;background:#409EFF;color:#fff;font-size:13px;cursor:pointer;">确定</button>
                 </div>
             </div>`;
             document.body.appendChild(overlay);
@@ -3172,16 +3189,16 @@
                 const overlay = document.createElement('div');
                 overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:100030;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);animation:gmFadeIn 0.2s;';
                 overlay.innerHTML = `
-                <div style="background:#fff;border-radius:12px;width:440px;max-width:92%;padding:22px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:'Helvetica Neue',Helvetica,'PingFang SC','Microsoft YaHei',Arial,sans-serif;">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="background:#fff;border-radius:12px;width:440px;max-width:92%;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.25);font-family:var(--gm-font);">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                         ${this.ICONS.success}
                         <b style="font-size:16px;color:#303133;">数据导入完成</b>
                     </div>
-                    <div style="font-size:13px;color:#606266;line-height:1.6;margin-bottom:14px;">${summary}</div>
+                    <div style="font-size:13px;color:#606266;line-height:1.6;margin-bottom:16px;">${summary}</div>
                     <div style="font-size:13px;color:#303133;font-weight:400;margin-bottom:4px;">请选择要覆盖的存档槽位：</div>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         ${state.slots.map((slot, i) => `
-                        <button data-index="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid ${state.sourceSlot === i ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${state.sourceSlot === i ? '#f0f7ff' : '#f5f7fa'};cursor:pointer;text-align:left;transition:background 0.2s;font-size:13px;color:#303133;">
+                        <button data-index="${i}" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:1px solid ${state.sourceSlot === i ? '#b3d8ff' : '#ebeef5'};border-radius:8px;background:${state.sourceSlot === i ? '#f0f7ff' : '#f5f7fa'};cursor:pointer;text-align:left;transition:background 0.2s;font-size:13px;color:#303133;">
                             <span style="color:#409EFF;display:inline-flex;">${this.ICONS.archive}</span>
                             <span>槽位 ${i + 1}：${slot ? esc(slot.name) + '（' + this.describeSlotSize(slot) + '）' : '空'}</span>
                             ${state.sourceSlot === i ? '<span class="gm-arc-badge">使用中</span>' : ''}
@@ -3214,7 +3231,7 @@
         if (!document.getElementById('gm-archive-toast-style')) {
             const style = getOrCreateStyleEl('gm-archive-toast-style');
             style.textContent = `
-            .gm-arc-toast { position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #fff; color: #303133; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; z-index: 300000; box-shadow: 0 6px 18px rgba(0,0,0,0.15); border-left: 3px solid #67C23A; opacity: 0; transition: all .25s ease-out; pointer-events: none; max-width: 80vw; }
+            .gm-arc-toast { position: fixed; top: 22px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #fff; color: #303133; padding: 8px 20px; border-radius: 8px; font-size: 13px; font-family: var(--gm-font); z-index: 300000; box-shadow: 0 6px 18px rgba(0,0,0,0.15); border-left: 3px solid #67C23A; opacity: 0; transition: all .25s ease-out; pointer-events: none; max-width: 80vw; }
             .gm-arc-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
             .gm-arc-toast.cancel { border-left-color: #909399; }
             .gm-arc-toast.info { border-left-color: #409EFF; }
@@ -3245,7 +3262,7 @@
         <div class="gm-sync-modal-card">
             <div class="gm-sync-modal-header">
                 <div class="gm-sync-modal-title">
-                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                     同步最新选课数据
                 </div>
                 <button type="button" id="gm-sync-close" class="gm-modal-close" aria-label="关闭">&times;</button>
@@ -3253,17 +3270,17 @@
             <div class="gm-sync-modal-body">
                 <div class="gm-sync-actions">
                     <button type="button" id="gm-sync-online" class="gm-sync-action">
-                        <span class="gm-sync-action__icon"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                        <span class="gm-sync-action__icon"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
                         <span><b>在线同步</b><small>从教务系统抓取最新选课学期数据</small></span>
                     </button>
                     <button type="button" id="gm-sync-import" class="gm-sync-action">
-                        <span class="gm-sync-action__icon gm-sync-action__icon--orange"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
+                        <span class="gm-sync-action__icon gm-sync-action__icon--orange"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
                         <span><b>本地上传</b><small>导入他人分享的选课数据</small></span>
                     </button>
                 </div>
                 <div class="gm-sync-archive">
                     <div class="gm-sync-archive__title">
-                        <svg viewBox="0 0 24 24" width="15" height="15" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                        <svg viewBox="0 0 24 24" width="15" height="15" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
                         数据存档
                     </div>
                     <div id="gm-archive-list" class="gm-archive-list"></div>
@@ -3338,7 +3355,7 @@
                 border-radius: 12px;
                 box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
                 display: flex; flex-direction: column;
-                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+                font-family: var(--gm-font);
                 overflow: hidden;
                 border: 1px solid #eee;
             }
@@ -3358,18 +3375,18 @@
             .gm-help-section {
                 background: #fff;
                 margin: 0 0 12px 0;
-                padding: 18px 24px;
+                padding: 16px 24px;
                 border-bottom: 1px solid #f0f0f0;
             }
             .gm-help-sec-title {
                 font-size: 15px; font-weight: 600; color: #303133;
-                margin-bottom: 12px; padding-left: 10px;
+                margin-bottom: 12px; padding-left: 8px;
                 border-left: 4px solid #409EFF;
                 display: flex; align-items: center; justify-content: space-between;
             }
             .gm-help-step {
                 font-size: 13.5px; color: #555; line-height: 1.7; margin-bottom: 8px;
-                position: relative; padding-left: 15px;
+                position: relative; padding-left: 16px;
             }
             .gm-help-step::before {
                 content: "•"; position: absolute; left: 0; color: #bbb;
@@ -3377,8 +3394,8 @@
 
             /* UI 标签模拟 */
             .gm-tag {
-                display: inline-block; padding: 0 6px; border-radius: 4px;
-                font-size: 12px; font-family: monospace; margin: 0 2px;
+                display: inline-block; padding: 0 8px; border-radius: 4px;
+                font-size: 12px; font-family: var(--gm-mono); margin: 0 2px;
             }
             .gm-tag-blue { background: #ecf5ff; color: #409EFF; border: 1px solid #d9ecff; }
             .gm-tag-red  { background: #fef0f0; color: #F56C6C; border: 1px solid #fde2e2; }
@@ -3411,10 +3428,10 @@
                     成绩与学业分析
                 </div>
                 <div class="gm-help-step">
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及”GPA计算器”。
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> GPA综合分析</span>：查看加权均分(标准/百分制)、专业排名、卡绩分析及”GPA计算器”。
                 </div>
                 <div class="gm-help-step">
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-gray"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> 导出成绩</span>：生成包含<b>教学班排名</b>的 Excel 成绩单。
                 </div>
                 <div class="gm-help-step">
                     <b>学生画像增强：</b>进入”学生画像”页面，脚本会在顶部增加加权平均分的卡片，并优化底部”计划外课程”的表格显示。
@@ -3432,7 +3449,7 @@
                 </div>
                 <div class="gm-help-step">
                     <b>第2步：管理存档</b><br>
-                    点击悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 同步最新选课数据</span>，可以：<br>
+                    点击悬浮球菜单 <span class="gm-tag gm-tag-blue"><svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-1px;" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> 同步最新选课数据</span>，可以：<br>
                     - 查看三个存档槽位的数据状态<br>
                     - 选择某个存档作为当前使用的数据源<br>
                     - 导出存档数据或上传本地数据<br>
@@ -3464,7 +3481,7 @@
                 </div>
             </div>
 
-            <div style="text-align:center; padding:15px; color:#c0c4cc; font-size:12px;">
+            <div style="text-align:center; padding:16px; color:#c0c4cc; font-size:12px;">
                 当前版本: ${GM_info.script.version} &nbsp;|&nbsp; 祝您学业进步
             </div>
         </div>
@@ -3749,41 +3766,41 @@
             const style = getOrCreateStyleEl(styleId);
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); z-index: 10005; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
-            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 95%; max-width: 1200px; height: 90vh; max-height: 950px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; animation: gmFadeIn 0.2s ease-out; }
+            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 95%; max-width: 1200px; height: 90vh; max-height: 950px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: var(--gm-font); animation: gmFadeIn 0.2s ease-out; }
             @keyframes gmFadeIn { from { opacity: 0; transform: scale(0.99); } to { opacity: 1; transform: scale(1); } }
-            .gm-modal-header { padding: 0 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 50px; }
+            .gm-modal-header { padding: 0 20px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; height: 48px; }
             .gm-modal-title { font-size: 16px; font-weight: 600; color: #333; display: flex; align-items: center; gap: 8px; }
-            .gm-modal-close { border: none; background: none; font-size: 24px; color: #999; cursor: pointer; padding: 0 10px; display:flex; align-items:center; }
-            .gm-tabs { display: flex; gap: 20px; margin-left: 30px; height: 100%; }
-            .gm-tab-item { display: flex; align-items: center; height: 100%; font-size: 14px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; padding: 0 5px; font-weight: 400; }
+            .gm-modal-close { border: none; background: none; font-size: 24px; color: #999; cursor: pointer; padding: 0 8px; display:flex; align-items:center; }
+            .gm-tabs { display: flex; gap: 20px; margin-left: 32px; height: 100%; }
+            .gm-tab-item { display: flex; align-items: center; height: 100%; font-size: 14px; color: #666; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; padding: 0 4px; font-weight: 400; }
             .gm-tab-item.active { color: #409EFF; border-bottom-color: #409EFF; }
-            .gm-filter-bar { padding: 10px 20px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 15px;}
-            .gm-filter-group { display: flex; align-items: center; gap: 10px; }
+            .gm-filter-bar { padding: 8px 20px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 16px;}
+            .gm-filter-group { display: flex; align-items: center; gap: 8px; }
             .gm-filter-label { font-size: 13px; color: #606266; }
-            .gm-filter-select { padding: 5px 10px; font-size: 13px; border: 1px solid #dcdfe6; border-radius: 3px; color: #606266; outline: none; background-color: white; }
-            .gm-btn-clear-all { padding: 5px 12px; font-size: 13px; border-radius: 3px; border: 1px solid #f56c6c; color: #f56c6c; background: #fff; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+            .gm-filter-select { padding: 4px 8px; font-size: 13px; border: 1px solid #dcdfe6; border-radius: 3px; color: #606266; outline: none; background-color: white; }
+            .gm-btn-clear-all { padding: 4px 12px; font-size: 13px; border-radius: 3px; border: 1px solid #f56c6c; color: #f56c6c; background: #fff; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
             .gm-btn-clear-all:hover { background: #f56c6c; color: #fff; }
             .gm-modal-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; background: #fff; }
             .gm-view-container { flex: 1; overflow-y: auto; padding: 0 20px 20px 20px; display: none; height: 100%; }
             .gm-view-container.active { display: block; }
-            .gm-course-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
-            .gm-course-table th { position: sticky; top: 0; background: #fff; z-index: 10; padding: 12px 10px; text-align: left; font-size: 13px; color: #909399; font-weight: 400; border-bottom: 2px solid #f0f0f0; }
-            .gm-course-table td { padding: 10px; font-size: 13px; color: #606266; border-bottom: 1px solid #ebeef5; vertical-align: middle; line-height: 1.4; }
-            .gm-code-badge { background: #f4f4f5; color: #909399; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-            .gm-btn-unfollow { padding: 4px 10px; font-size: 12px; border-radius: 3px; border: 1px solid #fab6b6; color: #f56c6c; background: #fef0f0; cursor: pointer; }
-            .gm-timetable { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 10px; border: 1px solid #e0e0e0; font-size: 12px; }
+            .gm-course-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 8px; }
+            .gm-course-table th { position: sticky; top: 0; background: #fff; z-index: 10; padding: 12px 8px; text-align: left; font-size: 13px; color: #909399; font-weight: 400; border-bottom: 2px solid #f0f0f0; }
+            .gm-course-table td { padding: 8px; font-size: 13px; color: #606266; border-bottom: 1px solid #ebeef5; vertical-align: middle; line-height: 1.4; }
+            .gm-code-badge { background: #f4f4f5; color: #909399; padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+            .gm-btn-unfollow { padding: 4px 8px; font-size: 12px; border-radius: 3px; border: 1px solid #fab6b6; color: #f56c6c; background: #fef0f0; cursor: pointer; }
+            .gm-timetable { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 8px; border: 1px solid #e0e0e0; font-size: 12px; }
             .gm-timetable th { background: #f8f9fa; color: #333; font-weight: 400; padding: 8px; text-align: center; border: 1px solid #ebeef5; height: 36px; }
             .gm-timetable td { border: 1px solid #ebeef5; height: auto; }
-            .gm-tt-period { position: relative; padding: 0 !important; vertical-align: top; width: 50px; height: 1px; }
+            .gm-tt-period { position: relative; padding: 0 !important; vertical-align: top; width: 48px; height: 1px; }
             .gm-period-wrapper { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
             .gm-period-num { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #555; font-weight: 400; width: 100%; }
             .gm-tt-cell-wrapper { width: 100%; min-height: 60px; display: flex; flex-direction: column; gap: 4px; padding: 4px; box-sizing: border-box; }
-            .gm-tt-course-block { padding: 6px; font-size: 12px; line-height: 1.35; color: #333; cursor: pointer; border-radius: 0; overflow: hidden; }
+            .gm-tt-course-block { padding: 8px; font-size: 12px; line-height: 1.35; color: #333; cursor: pointer; border-radius: 0; overflow: hidden; }
             .gm-tt-course-block:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); transform: scale(1.01); z-index: 5; transition: all 0.1s; }
-            .gm-tt-name { font-weight: 400; color: #000; margin-bottom: 3px; font-size: 13px; }
+            .gm-tt-name { font-weight: 400; color: #000; margin-bottom: 4px; font-size: 13px; }
             .gm-tt-info { color: #555; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             .gm-tt-tag { opacity: 0.9; font-size: 11px; color: #333; background: rgba(255,255,255,0.6); padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
-            .gm-tt-footer { margin-top:10px; font-size:12px; color:#606266; text-align:right; padding-right:10px;}
+            .gm-tt-footer { margin-top:8px; font-size:12px; color:#606266; text-align:right; padding-right:8px;}
             .gm-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #909399; text-align: center; padding-top: 60px;}
         `;
             document.head.appendChild(style);
@@ -3805,7 +3822,7 @@
             <div class="gm-modal-content">
                 <div class="gm-modal-header">
                     <div style="display:flex; align-items:center;">
-                        <div class="gm-modal-title"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px; margin-right:6px;" fill="#f56c6c" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>课程关注列表</div>
+                        <div class="gm-modal-title"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-3px; margin-right:8px;" fill="#f56c6c" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>课程关注列表</div>
                         <div class="gm-tabs">
                             <div class="gm-tab-item active" data-tab="list">列表视图</div>
                             <div class="gm-tab-item" data-tab="timetable">课表视图</div>
@@ -3818,13 +3835,13 @@
                         <div class="gm-filter-group">
                             <span class="gm-filter-label">学期:</span>
                             <select id="gm-semester-select" class="gm-filter-select" style="min-width:140px;">${semesterOptions}</select>
-                            <div id="gm-week-filter-container" style="display:none; align-items:center; margin-left:15px;">
+                            <div id="gm-week-filter-container" style="display:none; align-items:center; margin-left:16px;">
                                 <span class="gm-filter-label">周次:</span>
-                                <select id="gm-week-select" class="gm-filter-select" style="min-width:100px; margin-left:5px;">${weekOptions}</select>
+                                <select id="gm-week-select" class="gm-filter-select" style="min-width:100px; margin-left:4px;">${weekOptions}</select>
                             </div>
                         </div>
 
-                        <div class="gm-right-actions" style="display:flex; align-items:center; gap:15px;">
+                        <div class="gm-right-actions" style="display:flex; align-items:center; gap:16px;">
                             <span style="font-size:13px; color:#606266; font-weight:400;">
                                 总学分: <span id="gm-total-credits" style="color:#409EFF; font-weight:600;">0</span>
                             </span>
@@ -3951,19 +3968,19 @@
         const style = getOrCreateStyleEl('export-ui-styles');
         style.textContent = `
     .semester-bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10001; display: none; transition: all 0.3s; }
-    .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
+    .semester-checkbox-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10002; background-color: #ffffff; padding: 24px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); display: none; width: 450px; border: 1px solid #f0f0f0; font-family: var(--gm-font); }
     .semester-checkbox-container h3 { margin: 0 0 20px 0; font-size: 18px; color: #1f1f1f; display: flex; align-items: center; gap: 8px; font-weight: 600; }
-    .gm-semester-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 320px; overflow-y: auto; padding: 4px; margin-bottom: 20px; }
-    .gm-semester-item { display: flex; align-items: center; padding: 10px 12px; background: #f5f7fa; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; font-size: 14px; color: #444; user-select: none; }
+    .gm-semester-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 320px; overflow-y: auto; padding: 4px; margin-bottom: 20px; }
+    .gm-semester-item { display: flex; align-items: center; padding: 8px 12px; background: #f5f7fa; border-radius: 8px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; font-size: 14px; color: #444; user-select: none; }
     .gm-semester-item:hover { background: #eef5fe; border-color: #b3d8ff; color: #409EFF; }
-    .gm-semester-item input[type='checkbox'] { margin-right: 10px; width: 16px; height: 16px; cursor: pointer; }
+    .gm-semester-item input[type='checkbox'] { margin-right: 8px; width: 16px; height: 16px; cursor: pointer; }
     .button-container { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f0f0f0; padding-top: 20px; }
-    .semester-checkbox-container button { padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: all 0.2s; border: none; }
+    .semester-checkbox-container button { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: all 0.2s; border: none; }
     .confirm-export-button { background-color: #409EFF; color: white; }
     .confirm-export-button:hover { background-color: #66b1ff; transform: translateY(-1px); }
     .select-all-button { background-color: #f0f2f5; color: #595959; border: 1px solid #d9d9d9 !important; }
     .cancel-button { background-color: transparent; color: #8c8c8c; }
-    .gm-semester-list::-webkit-scrollbar { width: 6px; }
+    .gm-semester-list::-webkit-scrollbar { width: 8px; }
     .gm-semester-list::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
 `;
         document.head.appendChild(style);
@@ -4118,13 +4135,13 @@
             const style = getOrCreateStyleEl(styleId);
             style.textContent = `
             .gpa-report-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out; }
-            .gpa-report-modal { background-color: #f5f7fa; border-radius: 12px; width: 880px; max-width: 95%; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
-            .gpa-modal-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
+            .gpa-report-modal { background-color: #f5f7fa; border-radius: 12px; width: 880px; max-width: 95%; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); font-family: var(--gm-font); display: flex; flex-direction: column; max-height: 85vh; overflow: hidden; }
+            .gpa-modal-header { padding: 16px 24px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
             .gpa-modal-title { font-size: 18px; font-weight: 600; color: #303133; display: flex; align-items: center; gap: 8px;}
             .gpa-close-btn { border: none; background: transparent; font-size: 26px; color: #909399; cursor: pointer; line-height: 1; transition: color 0.2s; padding: 0; }
             .gpa-close-btn:hover { color: #f56c6c; }
             .gpa-modal-body { padding: 24px; overflow-y: auto; background-color: #f5f7fa; }
-            .gpa-modal-body::-webkit-scrollbar { width: 6px; }
+            .gpa-modal-body::-webkit-scrollbar { width: 8px; }
             .gpa-modal-body::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
 
             .gpa-modal-grid { display: flex; gap: 20px; align-items: flex-start; }
@@ -4132,32 +4149,32 @@
             .gpa-column-right { flex: 4.5; display: flex; flex-direction: column; gap: 16px; }
 
             .current-gpa-module { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.02); }
-            .gpa-report-modal h3 { margin: 0 0 15px 0; font-size: 16px; color: #303133; display: flex; align-items: center; }
+            .gpa-report-modal h3 { margin: 0 0 16px 0; font-size: 16px; color: #303133; display: flex; align-items: center; }
             .gpa-report-modal h3::before { content: ''; display: inline-block; width: 4px; height: 16px; background: #409EFF; margin-right: 8px; border-radius: 2px; }
             .gpa-report-modal p, .gpa-report-modal li { font-size: 14px; line-height: 1.8; color: #606266 !important; margin-bottom: 0;}
             .gpa-report-modal strong { color: #303133; font-weight: 600; }
 
             .gpa-report-modal details { border: 1px solid #ebeef5; border-radius: 8px; background-color: #fff; overflow: hidden; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.02); }
-            .gpa-report-modal summary { padding: 14px 18px; font-weight: 600; font-size: 15px; color: #303133; cursor: pointer; list-style: none; outline: none; transition: background 0.2s; user-select: none; }
+            .gpa-report-modal summary { padding: 16px 16px; font-weight: 600; font-size: 15px; color: #303133; cursor: pointer; list-style: none; outline: none; transition: background 0.2s; user-select: none; }
             .gpa-report-modal summary:hover { background: #f0f7ff; color: #409EFF; }
             .gpa-report-modal summary::-webkit-details-marker { display: none; }
-            .gpa-report-modal summary::before { content: ''; width: 12px; height: 12px; margin-right: 10px; display: inline-block; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909399'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E") no-repeat center / contain; transition: transform 0.2s; }
+            .gpa-report-modal summary::before { content: ''; width: 12px; height: 12px; margin-right: 8px; display: inline-block; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23909399'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E") no-repeat center / contain; transition: transform 0.2s; }
             .gpa-report-modal details[open] > summary::before { transform: rotate(90deg); }
             .gpa-report-modal details[open] > summary { border-bottom: 1px solid #ebeef5; background: #fafafa; }
 
             .gpa-calc-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.02); }
             .gpa-calc-card h4 { margin: 0 0 16px 0; font-size: 15px; color: #303133; font-weight: 600; display: flex; align-items: center; gap: 8px;}
-            .input-group { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 15px; gap: 6px; }
+            .input-group { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 16px; gap: 8px; }
             .input-group label { width: 100%; font-size: 13px; color: #606266; font-weight: 400;}
-            .input-group input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; transition: all 0.2s; outline: none; background: #fafafa;}
+            .input-group input { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; transition: all 0.2s; outline: none; background: #fafafa;}
             .input-group input:focus { border-color: #409EFF; background: #fff; box-shadow: 0 0 0 2px rgba(64,158,255,0.1);}
-            .calculate-btn { width: 100%; padding: 10px; background-color: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; margin-top: 5px; transition: background 0.2s; }
+            .calculate-btn { width: 100%; padding: 8px; background-color: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; margin-top: 4px; transition: background 0.2s; }
             .calculate-btn:hover { background-color: #66b1ff; }
-            .prediction-result { margin-top: 15px; font-weight: 600; text-align: center; font-size: 15px; min-height: 24px; color: #303133; background: #f0f9eb; padding: 12px; border-radius: 6px; display: none; }
+            .prediction-result { margin-top: 16px; font-weight: 600; text-align: center; font-size: 15px; min-height: 24px; color: #303133; background: #f0f9eb; padding: 12px; border-radius: 6px; display: none; }
 
-            .gpa-report-modal .tooltip-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #c0c4cc; color: white; font-size: 12px; cursor: help; margin-left: 6px; position: relative; }
+            .gpa-report-modal .tooltip-q { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background-color: #c0c4cc; color: white; font-size: 12px; cursor: help; margin-left: 8px; position: relative; }
             .gpa-report-modal .tooltip-q:hover::after { content: attr(data-gm-tooltip); position: absolute; left: 50%; bottom: 130%; transform: translateX(-50%); background-color: #303133; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: normal; white-space: pre-line; z-index: 10; width: max-content; max-width: 280px; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-            .disclaimer { font-size: 12px; color: #909399; margin-top: 20px; text-align: center; padding-top: 15px; border-top: 1px dashed #ebeef5; }
+            .disclaimer { font-size: 12px; color: #909399; margin-top: 20px; text-align: center; padding-top: 16px; border-top: 1px dashed #ebeef5; }
             @keyframes gmFadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
         `;
             document.head.appendChild(style);
@@ -4173,7 +4190,7 @@
 
         let contentHTML = `
         <div class="gpa-modal-header">
-            <div class="gpa-modal-title"><svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-3px; margin-right:8px;" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>GPA综合分析报告</div>
+            <div class="gpa-modal-title"><svg viewBox="0 0 24 24" width="20" height="20" style="vertical-align:-3px; margin-right:8px;" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>GPA综合分析报告</div>
             <button class="gpa-close-btn" title="关闭">&times;</button>
         </div>
         <div class="gpa-modal-body">
@@ -4196,11 +4213,11 @@
                     </div>
                     <details class="stuck-analysis-section">
                         <summary>卡绩分析</summary>
-                        <div class="details-content" style="padding: 18px;">
+                        <div class="details-content" style="padding: 16px;">
     `;
 
         if (reportData.hasStuckCourses) {
-            let stuckCoursesListHTML = '<ul style="padding-left: 20px; margin: 10px 0;">';
+            let stuckCoursesListHTML = '<ul style="padding-left: 20px; margin: 8px 0;">';
             reportData.stuckCoursesList.forEach(course => {
                 stuckCoursesListHTML += `<li>${esc(course['课程名称'])} (成绩: ${esc(course['成绩'])}, 绩点: ${esc(course['绩点'])})</li>`;
             });
@@ -4208,14 +4225,14 @@
             contentHTML += `
             <p>发现 <strong style="color:#C53030 !important;">${reportData.stuckCoursesCount} 门</strong>卡绩科目，共计 <strong>${reportData.stuckCoursesCredits}</strong> 学分。</p>
             ${stuckCoursesListHTML}
-            <p style="margin-top:10px; border-top:1px dashed #eee; padding-top:10px;">如果这些科目成绩均提高1分，您的GPA结果为：</p>
+            <p style="margin-top:8px; border-top:1px dashed #eee; padding-top:8px;">如果这些科目成绩均提高1分，您的GPA结果为：</p>
             <p>
                 <strong>总学分绩点：</strong> ${reportData.hypotheticalTotalCreditPoints}<br>
                 <strong>加权平均GPA：</strong> <strong style="color: #2E7D32 !important; font-size:16px;">${reportData.hypotheticalGpa}</strong>
             </p>
         `;
         } else {
-            contentHTML += `<p style="color:#2E7D32 !important; font-weight:400; text-align:center; padding: 10px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
+            contentHTML += `<p style="color:#2E7D32 !important; font-weight:400; text-align:center; padding: 8px 0;">[ 恭喜您！当前未发现卡绩科目 ]</p>`;
         }
 
         contentHTML += `
@@ -4226,7 +4243,7 @@
                 <div class="gpa-column-right">
                     <div class="gpa-calc-card">
                         <h4>
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                             预估 GPA
                         </h4>
                         <div class="input-group">
@@ -4243,7 +4260,7 @@
 
                     <div class="gpa-calc-card">
                         <h4>
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#67C23A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#67C23A" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
                             达成目标所需均绩
                         </h4>
                         <div class="input-group">
@@ -4286,7 +4303,7 @@
             resultDisplayA.style.display = 'block';
 
             if (isNaN(nextCredits) || nextCredits <= 0 || isNaN(nextGpa) || nextGpa < 1.0 || nextGpa > 4.1) {
-                resultDisplayA.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:5px;" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与GPA (GPA应在1.0-4.1之间)';
+                resultDisplayA.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:4px;" stroke="#F56C6C" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与GPA (GPA应在1.0-4.1之间)';
                 resultDisplayA.style.color = '#F56C6C';
                 resultDisplayA.style.background = '#fef0f0';
                 return;
@@ -4311,7 +4328,7 @@
             resultDisplayB.style.display = 'block';
 
             if (isNaN(targetGpa) || targetGpa < 1.0 || targetGpa > 4.1 || isNaN(nextCredits) || nextCredits <= 0) {
-                resultDisplayB.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:5px;" stroke="#F56C6C" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与期望GPA';
+                resultDisplayB.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:-2px; margin-right:4px;" stroke="#F56C6C" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>请输入有效的学分与期望GPA';
                 resultDisplayB.style.color = '#F56C6C';
                 resultDisplayB.style.background = '#fef0f0';
                 return;
@@ -4365,20 +4382,20 @@
         .gm-tooltip-trigger { position: relative; cursor: help; font-family: "iconfont" !important; font-size: 14px; font-style: normal; }
         .gm-tooltip-trigger:hover::after { content: attr(data-gm-tooltip); position: absolute; bottom: 125%; left: 50%; transform: translateX(-50%); background-color: #303133; color: #fff; padding: 8px 12px; border-radius: 4px; font-size: 12px; line-height: 1.4; white-space: pre-line; z-index: 10001; display: inline-block; width: max-content; max-width: 280px; box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1); pointer-events: none; }
         .el-card__body .header { display: flex; justify-content: space-between; align-items: center; }
-        .gm-trend-toggle-btn { padding: 5px 12px; font-size: 13px; border-radius: 4px; border: 1px solid #dcdfe6; background: #fff; color: #606266; cursor: pointer; transition: all 0.3s; outline: none; }
+        .gm-trend-toggle-btn { padding: 4px 12px; font-size: 13px; border-radius: 4px; border: 1px solid #dcdfe6; background: #fff; color: #606266; cursor: pointer; transition: all 0.3s; outline: none; }
         .gm-trend-toggle-btn:hover { color: #409EFF; border-color: #c6e2ff; background-color: #ecf5ff; }
         .gm-trend-toggle-btn.active { color: #409EFF; border-color: #409EFF; background-color: #ecf5ff; font-weight: 400; }
         .gm-trend-detail-panel { overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; border-top: 1px dashed transparent; }
-        .gm-trend-detail-panel.show { max-height: 800px; opacity: 1; margin-top: 15px; padding-top: 15px; border-top-color: #ebeef5; }
+        .gm-trend-detail-panel.show { max-height: 800px; opacity: 1; margin-top: 16px; padding-top: 16px; border-top-color: #ebeef5; }
         .gm-trend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-        .gm-trend-card { background: #fafafa; border: 1px solid #ebeef5; border-radius: 6px; padding: 10px 12px; transition: all 0.3s; position: relative; }
+        .gm-trend-card { background: #fafafa; border: 1px solid #ebeef5; border-radius: 6px; padding: 8px 12px; transition: all 0.3s; position: relative; }
         .gm-trend-card:hover { box-shadow: 0 2px 12px 0 rgba(0,0,0,0.05); background: #fff; }
         .gm-tc-close { position: absolute; top: 4px; right: 6px; font-size: 16px; color: #c0c4cc; cursor: pointer; line-height: 1; transition: color 0.2s, transform 0.2s; user-select: none; }
         .gm-tc-close:hover { color: #f56c6c; transform: scale(1.2); }
-        .gm-tc-title { font-size: 13px; font-weight: 600; color: #303133; margin-bottom: 8px; text-align: center; padding: 0 10px;}
+        .gm-tc-title { font-size: 13px; font-weight: 600; color: #303133; margin-bottom: 8px; text-align: center; padding: 0 8px;}
         .gm-tc-row { display: flex; align-items: center; font-size: 12px; color: #666; margin-top: 4px; line-height: 1; }
-        .gm-tc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
-        .gm-tc-val { margin-left: auto; font-weight: 600; font-family: Consolas, monospace; font-size: 13px; color: #333; }
+        .gm-tc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+        .gm-tc-val { margin-left: auto; font-weight: 600; font-family: var(--gm-mono); font-size: 13px; color: #333; }
     `;
         document.head.appendChild(style);
     }
@@ -4458,7 +4475,7 @@
         let html = '';
         // 如果还没获取到数据，渲染占位符
         if (!data) {
-            html = '<div style="padding: 25px; text-align: center; color: #909399; font-size: 13px;">正在获取历史成绩详情，请稍候...</div>';
+            html = '<div style="padding: 24px; text-align: center; color: #909399; font-size: 13px;">正在获取历史成绩详情，请稍候...</div>';
         } else {
             const semesterMap = {};
             data.allGrades.forEach(g => {
@@ -4593,11 +4610,14 @@
 
         enhancedContainer = document.createElement('div');
         enhancedContainer.id = enhancedId;
-        enhancedContainer.className = 'node-wrapper courseTreeNode marginBottom';
+        // courseTreeNode 是折叠隐藏与蓝色背景站点样式的父级限定；margin 取原节点计算值内联携带，由观察器持续同步
+        enhancedContainer.className = 'node-wrapper courseTreeNode';
+        try { enhancedContainer.style.margin = document.defaultView.getComputedStyle(originalTableContainer).margin; } catch (e) { }
         originalTableContainer.insertAdjacentElement('afterend', enhancedContainer);
 
-        const colGroupHTML = `<colgroup><col width="48"><col width="200"><col width="100"><col width="120"><col width="80"><col width="60"><col width="60"><col width="60"><col width="100"><col width="80"></colgroup>`;
-        const headerHTML = `<div class="el-table__header-wrapper"><table cellspacing="0" cellpadding="0" border="0" class="el-table__header" style="width: 100%;">${colGroupHTML}<thead class="has-gutter"><tr class="table-header"><th class="is-leaf" width="50"><div class="cell">序号</div></th><th class="is-leaf"><div class="cell">课程名称</div></th><th class="is-leaf" width="100"><div class="cell">课程代码</div></th><th class="is-leaf" width="120"><div class="cell">学年学期</div></th><th class="is-leaf" width="80"><div class="cell">是否必修</div></th><th class="is-leaf" width="60"><div class="cell">学分</div></th><th class="is-leaf" width="60"><div class="cell">成绩</div></th><th class="is-leaf" width="60"><div class="cell">绩点</div></th><th class="is-leaf" width="100"><div class="cell">教学班排名</div></th><th class="is-leaf" width="80"><div class="cell">是否通过</div></th></tr></thead></table></div>`;
+        // 列宽与原版一致：序号 48 / 课程名称 150 定宽，其余 8 列弹性均分剩余空间（与原生 el-table 伸缩行为相同）
+        const colGroupHTML = `<colgroup><col width="48"><col width="150"><col><col><col><col><col><col><col><col></colgroup>`;
+        const headerHTML = `<div class="el-table__header-wrapper"><table cellspacing="0" cellpadding="0" border="0" class="el-table__header" style="width: 100%; table-layout: fixed;">${colGroupHTML}<thead class="has-gutter"><tr class="table-header"><th class="is-leaf"><div class="cell">序号</div></th><th class="is-leaf"><div class="cell">课程名称</div></th><th class="is-leaf"><div class="cell">课程代码</div></th><th class="is-leaf"><div class="cell">学年学期</div></th><th class="is-leaf"><div class="cell">是否必修</div></th><th class="is-leaf"><div class="cell">学分</div></th><th class="is-leaf"><div class="cell">成绩</div></th><th class="is-leaf"><div class="cell">绩点</div></th><th class="is-leaf"><div class="cell">教学班排名</div></th><th class="is-leaf"><div class="cell">是否通过</div></th></tr></thead></table></div>`;
 
         const tableBodyRows = outOfPlanGrades.map((grade, index) => {
             const score = grade['成绩'];
@@ -4607,7 +4627,7 @@
             return `<tr class="el-table__row"><td class="cell-style"><div class="cell">${index + 1}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(grade['课程名称'] || '')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['课程代码'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学期'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${grade['是否必修'] ? '是' : '否'}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['学分'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip" style="${scoreStyle}">${esc(grade['成绩'] || '')}</div></td><td class="cell-style"><div class="cell el-tooltip">${esc(grade['绩点'] ?? '')}</div></td><td class="cell-style"><div class="cell el-tooltip"><span class="value">${esc(classRankMap.get(grade['课程代码']) || '-')}</span></div></td><td class="cell-style"><div class="cell el-tooltip">${passStatus}</div></td></tr>`;
         }).join('');
 
-        const bodyHTML = `<div class="el-table__body-wrapper is-scrolling-left"><table cellspacing="0" cellpadding="0" border="0" class="el-table__body" style="width: 100%;">${colGroupHTML}<tbody>${tableBodyRows}</tbody></table></div>`;
+        const bodyHTML = `<div class="el-table__body-wrapper is-scrolling-left"><table cellspacing="0" cellpadding="0" border="0" class="el-table__body" style="width: 100%; table-layout: fixed;">${colGroupHTML}<tbody>${tableBodyRows}</tbody></table></div>`;
 
         enhancedContainer.innerHTML = `<div class="node-handler background" style="padding-left: ${paddingLeft}; cursor: pointer;"><div class="arrow"></div><div class="title"><div class="course-name">计划外课程</div><div class="require-item"><span class="score">学分：</span><span class="con">共 ${totalCredits} | 已通过 ${passedCredits} | 未通过 </span><span class="unpassed">${failedCredits}</span></div></div></div><div class="node-child-wrapper none"><div class="node-child"><div class="child"><div class="el-table el-table--fit el-table--enable-row-hover el-table--enable-row-transition el-table--small" style="width: 100%;">${headerHTML}${bodyHTML}</div></div></div></div>`;
 
@@ -4782,6 +4802,16 @@
         window._gm_last_portrait_sem = null;
         const observer = new MutationObserver(() => {
             if (!ConfigManager.enablePortraitEnhancement) return;
+
+            // 增强节点行距持续同步：框架重算原节点 margin 后，把最新计算值同步给增强节点
+            const gmEnhanced = document.getElementById('gm-enhanced-table-wrapper');
+            const gmOriginal = document.querySelector('.outPlanTable');
+            if (gmEnhanced && gmOriginal) {
+                try {
+                    const gmMargin = document.defaultView.getComputedStyle(gmOriginal).margin;
+                    if (gmEnhanced.style.margin !== gmMargin) gmEnhanced.style.margin = gmMargin;
+                } catch (e) { }
+            }
 
             // 身份 tab 切换 → 重新拉取对应身份数据
             const activeTab = document.querySelector('.el-tabs__item.is-active');
@@ -4990,7 +5020,7 @@
                 <div id="gm-semester-dd" class="gm-semester-dd">
                     <div id="gm-semester-dd-trigger" class="gm-semester-dd__trigger">
                         <span id="gm-semester-dd-text">加载学期列表中...</span>
-                        <svg class="gm-semester-dd__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <svg class="gm-semester-dd__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                     <div id="gm-semester-dd-list" class="gm-semester-dd__list" style="display:none; max-height:${this.CONFIG.MAX_VISIBLE_SEMESTERS * this.CONFIG.SEMESTER_ITEM_HEIGHT}px;"></div>
                 </div>
@@ -5014,7 +5044,7 @@
                 reopenBtn.type = 'button';
                 reopenBtn.textContent = '选课助手';
                 reopenBtn.title = '重新打开选课助手面板';
-                reopenBtn.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999; padding:8px 14px; border:1px solid var(--gm-border); border-radius:8px; background:#fff; color:var(--gm-primary-text); font-size:13px; font-weight:400; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.12);';
+                reopenBtn.style.cssText = 'position:fixed; top:120px; right:30px; z-index:99999; padding:8px 16px; border:1px solid var(--gm-border); border-radius:8px; background:#fff; color:var(--gm-primary-text); font-size:13px; font-weight:400; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.12);';
                 reopenBtn.onclick = () => { reopenBtn.remove(); panel.style.display = 'block'; };
                 document.body.appendChild(reopenBtn);
             };
@@ -5239,11 +5269,11 @@
             div.id = 'gm-sync-overlay';
             div.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100002; color:white; display:flex; flex-direction:column; align-items:center; justify-content:center;';
             div.innerHTML = `
-            <div style="font-size:24px; font-weight:600; margin-bottom:15px;">正在同步课程数据...</div>
-            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:10px; color:#ffeb3b;">锁定抓取学期: ${semesterName}</div>
-            <div id="gm-overlay-status" style="font-size:16px; margin-bottom:10px; color:#ddd;">正在初始化...</div>
+            <div style="font-size:24px; font-weight:600; margin-bottom:16px;">正在同步课程数据...</div>
+            <div id="gm-overlay-target-sem" style="font-size:18px; margin-bottom:8px; color:#ffeb3b;">锁定抓取学期: ${semesterName}</div>
+            <div id="gm-overlay-status" style="font-size:16px; margin-bottom:8px; color:#ddd;">正在初始化...</div>
             <div style="font-size:18px;">已抓取: <span id="gm-sync-count" style="color:#4facfe; font-weight:600;">0</span> 条</div>
-            <div style="margin-top:30px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
+            <div style="margin-top:32px; color:#aaa; font-size:14px;">请勿关闭页面，程序正在自动操作</div>
         `;
             document.body.appendChild(div);
             return div;
@@ -5360,7 +5390,7 @@
             const btn = document.createElement('div');
             btn.className = 'gm-follow-btn';
             btn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
-            btn.style.cssText = `cursor: pointer; font-size: 20px; margin-top: 4px; line-height: 1; user-select: none; transition: all 0.2s; font-family: sans-serif;`;
+            btn.style.cssText = `cursor: pointer; font-size: 20px; margin-top: 4px; line-height: 1; user-select: none; transition: all 0.2s; font-family: var(--gm-font);`;
 
             const updateState = () => {
                 if (FollowManager.has(storageId)) {
@@ -5679,8 +5709,8 @@
                 // CSS调整：右浮动 + 阴影 + 字体加粗
                 btn.style.cssText = `
                  float: right;               /* 靠最右侧 */
-                 margin-right: 5px;          /* 右侧留一点缝隙 */
-                 margin-top: 5px;           /* 微调垂直位置，使其垂直居中 */
+                 margin-right: 4px;          /* 右侧留一点缝隙 */
+                 margin-top: 4px;           /* 微调垂直位置，使其垂直居中 */
                  font-weight: 400;           /* 正常字重 */
                  font-size: 14px;            /* 字体加大 */
                  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.5); /* 添加蓝色光晕阴影，增加显眼度 */
@@ -6312,8 +6342,8 @@
         // 定义高清 SVG 图标
         const svgs = {
             book: `<svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#409EFF;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-4px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
-            user: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:6px;flex:none;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
-            pin: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:6px;flex:none;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`
+            user: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:8px;flex:none;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+            pin: `<svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#5B6B80;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:8px;flex:none;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`
         };
 
         // 2. 注入美化后的 CSS
@@ -6328,7 +6358,7 @@
                 font-size: 13px;
                 cursor: pointer;
                 background-color: var(--gm-primary-light);
-                padding: 2px 6px;
+                padding: 2px 8px;
                 border-radius: var(--gm-radius-sm);
                 transition: all 0.2s;
             }
@@ -6356,7 +6386,7 @@
             /* 头部样式 */
             .gm-pt-header {
                 background: var(--gm-fill);
-                padding: 14px 18px;
+                padding: 16px 16px;
                 border-bottom: 1px solid var(--gm-border);
                 font-weight: 600; color: var(--gm-text-1); font-size: 14px;
                 display:flex; justify-content:space-between; align-items: center;
@@ -6375,13 +6405,13 @@
             .gm-pt-list { max-height: 420px; overflow-y: auto; padding: 0; }
 
             /* 滚动条美化 */
-            .gm-pt-list::-webkit-scrollbar { width: 6px; }
+            .gm-pt-list::-webkit-scrollbar { width: 8px; }
             .gm-pt-list::-webkit-scrollbar-track { background: transparent; }
             .gm-pt-list::-webkit-scrollbar-thumb { background-color: var(--gm-border); border-radius: 3px; }
 
             /* 单个课程卡片 */
             .gm-pt-item {
-                padding: 14px 20px;
+                padding: 16px 20px;
                 border-bottom: 1px solid #f2f4f7;
                 transition: background-color 0.2s;
             }
@@ -6396,7 +6426,7 @@
             .gm-pt-title {
                 font-weight: 400; font-size: 14px; color: var(--gm-text-1);
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                flex: 1; min-width: 0; padding-right: 10px;
+                flex: 1; min-width: 0; padding-right: 8px;
             }
 
             /* 代码行：课程代码 + 关注按钮 */
@@ -6407,7 +6437,7 @@
             .gm-pt-code { font-size: 13.5px; font-weight: 400; color: var(--gm-text-3); font-family: var(--gm-mono); }
 
             /* 元信息区：教师、地点 */
-            .gm-pt-meta { display: flex; flex-direction: column; gap: 5px; color: var(--gm-text-2); font-size: 12.5px; line-height: 1.55; }
+            .gm-pt-meta { display: flex; flex-direction: column; gap: 4px; color: var(--gm-text-2); font-size: 12.5px; line-height: 1.55; }
             .gm-pt-row { display: flex; align-items: center; }
             .gm-pt-row--place { align-items: flex-start; }
             .gm-pt-row--place svg { margin-top: 2px; }
@@ -6416,7 +6446,7 @@
             .gm-pt-stat {
                 font-family: var(--gm-font); font-size: 12.5px; font-weight: 600;
                 font-variant-numeric: tabular-nums;
-                padding: 2px 7px; border-radius: var(--gm-radius-sm); flex-shrink: 0;
+                padding: 2px 8px; border-radius: var(--gm-radius-sm); flex-shrink: 0;
             }
             .gm-tag-full { color: var(--gm-danger-text); background: var(--gm-danger-bg); border: 1px solid var(--gm-danger-border); }
             .gm-tag-avail { color: var(--gm-success-text); background: var(--gm-success-bg); border: 1px solid var(--gm-success-border); }
@@ -6556,7 +6586,7 @@
 
             let contentHTML = '';
             if (courses.length === 0) {
-                contentHTML = '<div style="padding:30px;text-align:center;color:#909399;font-size:13px;">本学期暂无开课记录</div>';
+                contentHTML = '<div style="padding:32px;text-align:center;color:#909399;font-size:13px;">本学期暂无开课记录</div>';
             } else {
                 contentHTML = `<div class="gm-pt-list">`;
                 courses.forEach(c => {
@@ -6653,7 +6683,7 @@
     // =-=-=-=-=-=-=-=-=-=-=-=-= 2.10 选课时间提醒 =-=-=-=-=-=-=-=-=-=-=-=-=
     // 时间表放在仓库 schedule.json 中，按身份和学期维护；脚本运行时拉取并缓存 1 小时
     const SCHEDULE_CONFIG_URLS = [
-        'https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/master/schedule.json',
+        'https://gitee.com/leamloli/aoxiang-jwxt-enhance/raw/main/schedule.json',
         'https://raw.githubusercontent.com/zengzoxiong/aoxiang-jwxt-enhance/main/schedule.json'
     ];
     const SCHEDULE_CACHE_TTL = 60 * 60 * 1000;
@@ -6863,7 +6893,7 @@
                     else if (!activePhaseFound && phase.type === 'positive' && now >= preStartTime && now < startTime) {
                         const hoursLeft = Math.ceil((startTime - now) / 3600000);
                         statusHtml = `<span style="color: #E65100; font-weight:400;">${group.groupName}${phase.name}</span> 将于 ${hoursLeft} 小时后开始。` +
-                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:400; margin-left:10px;">[建议提前点击此处同步课程余量数据]</span>`;
+                            `<span id="gm-sch-pre-sync" style="color:#409EFF; cursor:pointer; text-decoration:underline; font-weight:400; margin-left:8px;">[建议提前点击此处同步课程余量数据]</span>`;
                         showPreSyncLink = true;
                         activePhaseFound = true;
                     }
@@ -6904,21 +6934,21 @@
                     background: #fff; padding: 12px; border-radius: 8px;
                     box-shadow: 0 4px 25px rgba(0,0,0,0.15);
                     border: 1px solid #dcdfe6;
-                    font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+                    font-family: var(--gm-font);
                     animation: gmSlideUp 0.5s ease-out;
                     width: auto; max-width: 680px;
                 }
                 .gm-status-bar {
                     text-align: center; background: #fdf6ec; padding: 8px;
-                    border-radius: 4px; margin-bottom: 10px; font-size: 13px;
+                    border-radius: 4px; margin-bottom: 8px; font-size: 13px;
                     border: 1px inset #faecd8; line-height: 1.5;
                 }
                 .gm-sch-table {
                     width: 100%; border-collapse: collapse; font-size: 12px; color: #333;
-                    margin-bottom: 10px; border: 1px solid #ebeef5;
+                    margin-bottom: 8px; border: 1px solid #ebeef5;
                 }
                 .gm-sch-table th, .gm-sch-table td {
-                    border: 1px solid #ebeef5; padding: 6px 8px; text-align: center; vertical-align: middle;
+                    border: 1px solid #ebeef5; padding: 8px 8px; text-align: center; vertical-align: middle;
                 }
                 .gm-sch-table th { background-color: #f5f7fa; font-weight: 400; color: #606266; }
                 .gm-sch-highlight { color: #409EFF; font-weight: 400; }
@@ -6926,9 +6956,9 @@
                     display: flex; justify-content: space-between; align-items: center;
                     font-size: 12px; color: #909399; margin-top: 8px;
                 }
-                .gm-sch-btn-group { display: flex; gap: 10px; }
+                .gm-sch-btn-group { display: flex; gap: 8px; }
                 .gm-schedule-btn {
-                    border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer;
+                    border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;
                     font-size: 12px; transition: opacity 0.2s; color: white;
                 }
                 .gm-btn-close { background: #f56c6c; }
@@ -6946,7 +6976,7 @@
             div.innerHTML = `
             <div style="font-weight:600; font-size:14px; margin-bottom:8px; color:#303133; text-align:center;">
                 选课时间安排表
-                <span style="font-size:11.5px; font-weight:400; color:var(--gm-primary-text); background:var(--gm-primary-light); border:1px solid var(--gm-primary-border); padding:1px 6px; border-radius:6px; margin-left:6px; vertical-align:1px;">${identityName}</span>
+                <span style="font-size:11.5px; font-weight:400; color:var(--gm-primary-text); background:var(--gm-primary-light); border:1px solid var(--gm-primary-border); padding:1px 8px; border-radius:6px; margin-left:8px; vertical-align:1px;">${identityName}</span>
             </div>
             <div class="gm-status-bar">${statusHtml}</div>
             <table class="gm-sch-table">
@@ -6959,7 +6989,7 @@
             </table>
             <div class="gm-schedule-footer">
                 <label style="cursor:pointer; display:flex; align-items:center; user-select:none;">
-                    <input type="checkbox" id="gm-schedule-check" style="margin-right:6px;">
+                    <input type="checkbox" id="gm-schedule-check" style="margin-right:8px;">
                     不再显示此安排
                 </label>
                 <div class="gm-sch-btn-group">
@@ -7066,33 +7096,33 @@
             const style = getOrCreateStyleEl('gm-eval-style');
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 20000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-            .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif; animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
-            .gm-modal-header { padding: 18px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
+            .gm-modal-content { background: #fff; border-radius: 12px; width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25); font-family: var(--gm-font); animation: gmFadeIn 0.25s ease-out; border: 1px solid #ebeef5; }
+            .gm-modal-header { padding: 16px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px 12px 0 0; }
             .gm-modal-title { font-size: 17px; font-weight: 600; color: #303133; }
-            .gm-close-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #909399; transition: all 0.2s; }
+            .gm-close-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #909399; transition: all 0.2s; }
             .gm-close-btn:hover { background-color: #f56c6c; color: #fff; transform: rotate(90deg); }
             .gm-close-btn svg { width: 16px; height: 16px; fill: currentColor; }
             .gm-eval-body { padding: 20px; overflow-y: auto; flex: 1; background: #f5f7fa; }
-            .gm-course-group { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); overflow: hidden; }
-            .gm-course-header { background: #eef5fe; padding: 10px 15px; border-bottom: 1px solid #ebeef5; font-weight: 600; color: #409EFF; font-size: 14px; display: flex; align-items: center; gap: 8px; justify-content: space-between;}
+            .gm-course-group { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); overflow: hidden; }
+            .gm-course-header { background: #eef5fe; padding: 8px 16px; border-bottom: 1px solid #ebeef5; font-weight: 600; color: #409EFF; font-size: 14px; display: flex; align-items: center; gap: 8px; justify-content: space-between;}
             .gm-course-status-tag { font-size: 12px; font-weight: normal; padding: 2px 8px; border-radius: 10px; }
             .gm-tag-done { background: #f0f9eb; color: #67C23A; border: 1px solid #e1f3d8; }
             .gm-tag-todo { background: #fdf6ec; color: #E6A23C; border: 1px solid #faecd8; }
-            .gm-teacher-row { display: flex; align-items: center; padding: 12px 15px; border-bottom: 1px solid #f2f2f2; transition: background 0.2s; }
+            .gm-teacher-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f2f2f2; transition: background 0.2s; }
             .gm-teacher-row:last-child { border-bottom: none; }
             .gm-teacher-row:hover { background: #fafafa; }
             .gm-teacher-row.gm-row-done { background: #fcfcfc; color: #999; }
-            .gm-t-name { flex: 1; font-size: 14px; color: #606266; margin-left: 10px; font-weight: 400; display: flex; align-items: center; gap: 5px; }
+            .gm-t-name { flex: 1; font-size: 14px; color: #606266; margin-left: 8px; font-weight: 400; display: flex; align-items: center; gap: 4px; }
             .gm-row-done .gm-t-name { color: #a8abb2; text-decoration: line-through; }
             .gm-done-badge { font-size: 12px; color: #67C23A; border: 1px solid #67C23A; padding: 0 4px; border-radius: 3px; transform: scale(0.9); text-decoration: none; display: inline-block;}
-            .gm-score-input { width: 80px; padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px; text-align: center; font-family: Consolas, monospace; transition: 0.2s; margin-right: 15px; }
+            .gm-score-input { width: 80px; padding: 8px 8px; border: 1px solid #dcdfe6; border-radius: 4px; text-align: center; font-family: var(--gm-mono); transition: 0.2s; margin-right: 16px; }
             .gm-score-input:focus { border-color: #409EFF; outline: none; box-shadow: 0 0 0 2px rgba(64,158,255,0.2); }
             .gm-score-input:disabled { background: #f5f7fa; color: #c0c4cc; cursor: not-allowed; border-color: #e4e7ed; }
             .gm-checkbox { cursor: pointer; width: 16px; height: 16px; accent-color: #409EFF; }
             .gm-checkbox:disabled { cursor: not-allowed; opacity: 0.5; }
-            .gm-status-box { width: 70px; text-align: right; font-size: 12px; }
-            .gm-modal-footer { padding: 16px 24px; border-top: 1px solid #eee; background: #fff; border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 15px; }
-            .gm-btn { padding: 9px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; font-weight: 400; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+            .gm-status-box { width: 72px; text-align: right; font-size: 12px; }
+            .gm-modal-footer { padding: 16px 24px; border-top: 1px solid #eee; background: #fff; border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+            .gm-btn { padding: 8px 20px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; font-weight: 400; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px; }
             .gm-btn-primary { background: #409EFF; color: white; }
             .gm-btn-primary:hover { background: #66b1ff; }
             .gm-btn-warning { background: #E6A23C; color: white; }
@@ -7159,23 +7189,23 @@
             overlay.innerHTML = `
             <div class="gm-modal-content">
                 <div class="gm-modal-header">
-                    <div class="gm-modal-title">自动评教功能 <span style="font-size:12px;font-weight:normal;color:#999;margin-left:10px;">待评任务: ${pendingCount}</span></div>
+                    <div class="gm-modal-title">自动评教功能 <span style="font-size:12px;font-weight:normal;color:#999;margin-left:8px;">待评任务: ${pendingCount}</span></div>
                     <button class="gm-close-btn" id="gm-eval-close" title="关闭">
                         <svg viewBox="0 0 1024 1024"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm165.4 618.2l-66-.3L512 563.4l-99.3 118.4-66.1.3c-4.4 0-8-3.5-8-8 0-1.9.7-3.7 1.9-5.2l130.1-155L340.5 359a8.32 8.32 0 0 1-1.9-5.2c0-4.4 3.6-8 8-8l66.1.3L512 464.6l99.3-118.4 66-.3c4.4 0 8 3.5 8 8 0 1.9-.7 3.7-1.9 5.2L553.5 514l130 155c1.2 1.5 1.9 3.3 1.9 5.2 0 4.4-3.6 8-8 8z"></path></svg>
                     </button>
                 </div>
                 <div class="gm-eval-body" id="gm-eval-container">
-                    <div style="margin-bottom:10px;display:flex;justify-content:flex-end;">
+                    <div style="margin-bottom:8px;display:flex;justify-content:flex-end;">
                         <label style="font-size:13px;color:#606266;cursor:pointer;display:flex;align-items:center;">
-                            <input type="checkbox" id="gm-check-all-available" style="margin-right:5px;"> 全选所有待评任务
+                            <input type="checkbox" id="gm-check-all-available" style="margin-right:4px;"> 全选所有待评任务
                         </label>
                     </div>
                 </div>
                 <div class="gm-modal-footer">
                     <div style="flex:1;"></div>
-                    <div style="display:flex; gap:10px;">
+                    <div style="display:flex; gap:8px;">
                         <button id="gm-btn-min-eval" class="gm-btn gm-btn-warning" title="跳过已完成课程，未完成课程只评第一个">
-                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>自动完成最低评教
+                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>自动完成最低评教
                         </button>
                         <button id="gm-btn-run-selected" class="gm-btn gm-btn-primary">
                             <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"></path></svg>开始评教
@@ -7188,7 +7218,7 @@
 
             const container = document.getElementById('gm-eval-container');
             if (Object.keys(courseGroups).length === 0) {
-                container.innerHTML = '<div style="text-align:center;padding:50px;color:#999;">当前没有评教任务</div>';
+                container.innerHTML = '<div style="text-align:center;padding:48px;color:#999;">当前没有评教任务</div>';
                 document.getElementById('gm-btn-min-eval').disabled = true;
                 document.getElementById('gm-btn-run-selected').disabled = true;
             } else {
@@ -7576,7 +7606,7 @@
             btn.id = 'gm-page-eval-btn';
             btn.className = 'el-button el-button--primary el-button--small';
             btn.innerHTML = `<i class="el-icon-s-cooperation"></i> 打开自动评教`;
-            btn.style.cssText = 'margin-left: 15px; vertical-align: top; height: 32px; font-weight: 400; box-shadow: 0 2px 6px rgba(64,158,255, 0.3);';
+            btn.style.cssText = 'margin-left: 16px; vertical-align: top; height: 32px; font-weight: 400; box-shadow: 0 2px 6px rgba(64,158,255, 0.3);';
 
             if (targetContainer.parentNode) targetContainer.parentNode.insertBefore(btn, targetContainer.nextSibling);
             else targetContainer.appendChild(btn);
@@ -7840,7 +7870,7 @@
             if (!toast) {
                 toast = document.createElement('div');
                 toast.id = 'gm-search-toast';
-                toast.style.cssText = 'position:fixed; top:20%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:white; padding:12px 24px; border-radius:30px; font-size:14px; z-index:100020; transition:opacity 0.3s; box-shadow:0 4px 15px rgba(0,0,0,0.2); pointer-events:none; font-family: "PingFang SC", "Microsoft YaHei", sans-serif;';
+                toast.style.cssText = 'position:fixed; top:20%; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:white; padding:12px 24px; border-radius:30px; font-size:14px; z-index:100020; transition:opacity 0.3s; box-shadow:0 4px 15px rgba(0,0,0,0.2); pointer-events:none; font-family: var(--gm-font);';
                 document.body.appendChild(toast);
             }
             toast.innerText = msg;
@@ -7863,10 +7893,10 @@
             const style = getOrCreateStyleEl('gm-person-search-style');
             style.textContent = `
             .gm-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); z-index: 10005; display: flex; align-items: center; justify-content: center; animation: gmFadeIn 0.2s ease-out;}
-            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 880px; max-width: 95%; height: 75vh; max-height: 850px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif; }
-            .gm-modal-header { padding: 18px 24px; border-bottom: 1px solid #ebeef5; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-            .gm-modal-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 10px;}
-            .gm-modal-close { border: none; background: transparent; font-size: 26px; color: #909399; cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s; font-family: Arial, sans-serif;}
+            .gm-modal-content { background-color: #fff; border-radius: 12px; width: 880px; max-width: 95%; height: 75vh; max-height: 850px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; font-family: var(--gm-font); }
+            .gm-modal-header { padding: 16px 24px; border-bottom: 1px solid #ebeef5; background: #fff; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+            .gm-modal-title { font-size: 17px; font-weight: 600; color: #2c3e50; display: flex; align-items: center; gap: 8px;}
+            .gm-modal-close { border: none; background: transparent; font-size: 26px; color: #909399; cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s; font-family: var(--gm-font);}
             .gm-modal-close:hover { color: #f56c6c; }
 
             .gm-ps-body { display: flex; flex-direction: row; height: 100%; overflow: hidden; padding: 0 !important; background: #fff;}
@@ -7874,35 +7904,35 @@
             .gm-ps-right { flex: 1; display: flex; align-items: center; justify-content: center; background: #f5f7fa; position: relative; overflow: hidden;}
 
             .gm-ps-search-box { padding: 16px; background: #fff; border-bottom: 1px solid #ebeef5; box-shadow: 0 2px 10px rgba(0,0,0,0.02); z-index: 2;}
-            .gm-ps-search-bar { display: flex; gap: 10px; }
-            .gm-ps-input { flex: 1; padding: 10px 14px; border: 1px solid #dcdfe6; border-radius: 6px; outline: none; font-size: 14px; transition: all 0.2s; color: #303133; width: 100%; box-sizing: border-box;}
+            .gm-ps-search-bar { display: flex; gap: 8px; }
+            .gm-ps-input { flex: 1; padding: 8px 16px; border: 1px solid #dcdfe6; border-radius: 6px; outline: none; font-size: 14px; transition: all 0.2s; color: #303133; width: 100%; box-sizing: border-box;}
             .gm-ps-input:focus { border-color: #409EFF; box-shadow: 0 0 0 2px rgba(64,158,255,0.1);}
-            .gm-ps-btn { padding: 0 18px; background: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: background 0.2s; white-space: nowrap;}
+            .gm-ps-btn { padding: 0 16px; background: #409EFF; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 400; transition: background 0.2s; white-space: nowrap;}
             .gm-ps-btn:hover { background: #66b1ff; }
 
             .gm-ps-list-container { flex: 1; overflow-y: auto; padding: 0; position: relative; }
-            .gm-ps-list-container::-webkit-scrollbar { width: 6px; }
+            .gm-ps-list-container::-webkit-scrollbar { width: 8px; }
             .gm-ps-list-container::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
 
-            .gm-ps-list-item { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #ebeef5; transition: all 0.2s; background: #fff; display: flex; flex-direction: column; gap: 8px; position: relative;}
+            .gm-ps-list-item { padding: 16px 20px; cursor: pointer; border-bottom: 1px solid #ebeef5; transition: all 0.2s; background: #fff; display: flex; flex-direction: column; gap: 8px; position: relative;}
             .gm-ps-list-item:hover { background: #f0f7ff; }
             .gm-ps-list-item.active { background: #ecf5ff; }
             .gm-ps-list-item.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #409EFF; }
             .gm-ps-item-name { font-size: 15px; font-weight: 400; color: #303133; display: flex; justify-content: space-between; align-items: center;}
-            .gm-ps-item-id { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 13.5px; color: #8c939d; letter-spacing: 0.8px;}
+            .gm-ps-item-id { font-family: var(--gm-font); font-size: 13.5px; color: #8c939d; letter-spacing: 0.8px;}
             .gm-ps-loader { padding: 24px; text-align: center; color: #909399; font-size: 14px; }
 
             .gm-ps-card { background: #fff; width: 380px; border-radius: 12px; box-shadow: 0 16px 36px rgba(0,0,0,0.08); overflow: hidden; display: none; flex-direction: column; border: 1px solid #ebeef5;}
             .gm-ps-card.show { display: flex; animation: gmFadeInUp 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
-            .gm-ps-card-header { background: linear-gradient(135deg, #409EFF, #73bfff); height: 100px; position: relative; transition: background 0.5s ease;}
-            .gm-ps-avatar { width: 80px; height: 80px; border-radius: 50%; background: #fff; border: 4px solid #fff; position: absolute; bottom: -40px; left: 28px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; font-size: 34px; color: #409EFF; font-weight: bold; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; transition: color 0.5s ease;}
+            .gm-ps-card-header { background: var(--gm-primary); height: 100px; position: relative; transition: background 0.5s ease;}
+            .gm-ps-avatar { width: 80px; height: 80px; border-radius: 50%; background: #fff; border: 4px solid #fff; position: absolute; bottom: -40px; left: 28px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); display: flex; align-items: center; justify-content: center; font-size: 34px; color: #409EFF; font-weight: bold; font-family: var(--gm-font); transition: color 0.5s ease;}
             .gm-ps-card-body { padding: 56px 28px 32px 28px; }
 
-            .gm-ps-info-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px dashed #ebeef5; }
+            .gm-ps-info-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px dashed #ebeef5; }
             .gm-ps-info-row:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
 
             /* 新增：两列网格布局，用于展示性别和籍贯等简短信息 */
-            .gm-ps-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px dashed #ebeef5; }
+            .gm-ps-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px dashed #ebeef5; }
             .gm-ps-info-col { display: flex; flex-direction: column; gap: 8px; }
 
             .gm-ps-info-label { font-size: 13px; color: #909399; font-weight: 400;}
@@ -7923,7 +7953,7 @@
             <div class="gm-modal-content">
                 <div class="gm-modal-header">
                     <div class="gm-modal-title">
-                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" width="22" height="22" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="10" cy="8" r="5"></circle>
                             <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                             <line x1="21" y1="21" x2="15" y2="15"></line>
@@ -7949,7 +7979,7 @@
 
                     <div class="gm-ps-right">
                         <div id="gm-ps-empty-tip" style="color:#a8abb2; font-size:14px; display:flex; flex-direction:column; align-items:center; gap:16px;">
-                            <svg viewBox="0 0 24 24" width="56" height="56" stroke="#dcdfe6" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" width="56" height="56" stroke="#dcdfe6" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                 <polyline points="21 15 16 10 5 21"></polyline>
@@ -7963,7 +7993,7 @@
                             </div>
                             <div class="gm-ps-card-body">
                                 <div id="gm-ps-card-name" style="font-size: 22px; font-weight: 600; color: #2c3e50; margin-bottom: 8px; letter-spacing: 1px;">-</div>
-                                <div id="gm-ps-card-id" style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #8c939d; font-size: 15px; margin-bottom: 28px; letter-spacing: 0.8px;">-</div>
+                                <div id="gm-ps-card-id" style="font-family: var(--gm-font); color: #8c939d; font-size: 15px; margin-bottom: 28px; letter-spacing: 0.8px;">-</div>
 
                                 <!-- 提取的籍贯和性别（双列网格） -->
                                 <div class="gm-ps-info-grid" id="gm-ps-extra-info">
@@ -8104,7 +8134,7 @@
                 const dept = item.yxmc || '未知单位';
 
                 const identity = this._inferIdentity(id);
-                const tagHtml = identity.short ? `<span style="font-size:12px; font-weight:normal; color:#909399; background:#f0f2f5; padding:3px 8px; border-radius:4px; letter-spacing:0.5px;">${identity.short}</span>` : '';
+                const tagHtml = identity.short ? `<span style="font-size:12px; font-weight:normal; color:#909399; background:#f0f2f5; padding:4px 8px; border-radius:4px; letter-spacing:0.5px;">${identity.short}</span>` : '';
 
                 html += `
                 <div class="gm-ps-list-item" data-idx="${actualIdx}">
@@ -8365,29 +8395,29 @@
             .gm-textbook-wrapper {
                 margin: 20px; padding: 20px; background: #fff;
                 border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+                font-family: var(--gm-font);
             }
             .gm-textbook-title {
-                font-size: 16px; font-weight: 600; color: #303133; margin-bottom: 15px;
-                border-left: 4px solid #409EFF; padding-left: 10px;
+                font-size: 16px; font-weight: 600; color: #303133; margin-bottom: 16px;
+                border-left: 4px solid #409EFF; padding-left: 8px;
             }
             .gm-textbook-table {
                 width: 100%; border-collapse: collapse; font-size: 13px;
             }
             .gm-textbook-table th, .gm-textbook-table td {
-                border: 1px solid #ebeef5; padding: 10px 15px; text-align: center; vertical-align: middle;color: #606266;
+                border: 1px solid #ebeef5; padding: 8px 16px; text-align: center; vertical-align: middle;color: #606266;
             }
             .gm-textbook-table th {
                 background: #f5f7fa; font-weight: 400; color: #333;
             }
             .gm-textbook-table tr:hover { background-color: #f5f7fa; }
-            .gm-textbook-empty { text-align: center; color: #909399; padding: 30px; }
+            .gm-textbook-empty { text-align: center; color: #909399; padding: 32px; }
             .gm-textbook-course { font-weight: 400; color: #409EFF; }
             .gm-textbook-course a { color: #409EFF; text-decoration: none; transition: color 0.2s; }
             .gm-textbook-course a:hover { color: #66b1ff; text-decoration: underline; }
             .gm-online-cell { background: #fdf6ec; color: #e6a23c !important; font-weight: 400; }
             .gm-online-btn {
-                display: inline-block; padding: 4px 12px; margin-left: 10px;
+                display: inline-block; padding: 4px 12px; margin-left: 8px;
                 background-color: #409EFF; color: #fff; border-radius: 4px;
                 text-decoration: none; font-size: 12px; transition: background 0.3s;
             }
@@ -8459,11 +8489,11 @@
                     const platformDisplay = tb.platformName || "在线平台";
                     const linkHtml = targetUrl
                         ? `<a href="${targetUrl}" target="_blank" class="gm-online-btn">跳转至 ${esc(platformDisplay)}</a>`
-                        : `<span style="margin-left:10px; color:#999; font-size:12px;">(暂无跳转链接)</span>`;
+                        : `<span style="margin-left:8px; color:#999; font-size:12px;">(暂无跳转链接)</span>`;
 
                     rowsHtml += `
                     <td colspan="6" class="gm-online-cell">
-                        <span style="margin-right:8px;"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:3px;" stroke="#909399" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>在线开放课程</span>
+                        <span style="margin-right:8px;"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px; margin-right:4px;" stroke="#909399" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>在线开放课程</span>
                         <span>平台：${esc(platformDisplay)}</span>
                         ${linkHtml}
                     </td>
@@ -8509,6 +8539,509 @@
     try {
         TextbookInfoModule.installHook();
     } catch (e) { Logger.error('2.13', '教材拦截器挂载失败', e); }
+
+    // =-=-=-=-=-=-=-=-=-=-=-=-= 2.14 课表导出二维码（扫码导入翱翔助手） =-=-=-=-=-=-=-=-=-=-=-=-=
+    // 数据源：课表页加载时自身请求的 print-data 接口（结构化 activities[]），由 XHR 拦截器被动缓存；
+    // 未命中时在页面上下文主动补拉（复用页面 JS 注入的瑞数动态参数）。
+    // 二维码内容遵循翱翔助手《课表二维码内容规范 v1》：
+    //   aoxiang-schedule:v1: + base64(gzip(备份JSON))，纠错级别 L，容量上限 2953 字节。
+    const ScheduleQrModule = {
+        TAG: '2.14',
+        // 备份 JSON 课程色板（取自翱翔助手规范预设色板）
+        COLOR_PALETTE: ['#E53935', '#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#00ACC1', '#FFB300', '#3949AB'],
+        QR_PAYLOAD_PREFIX: 'aoxiang-schedule:v1:',
+        QR_PAYLOAD_MAX: 2953, // QR Version 40 / 纠错 L 的字节容量
+
+        // 拦截到的最新 print-data：{ semesterId: string|null, data: object }
+        _captured: null,
+
+        // 解包响应：print-data 实际结构为 { studentTableVm: { activities, arrangedLessonSearchVms, ... } }，
+        // 兼容部分环境直接返回扁平结构的情况
+        extractVm(json) {
+            return (json && typeof json === 'object' && json.studentTableVm) ? json.studentTableVm : json;
+        },
+
+        // 【阶段1】加载期执行：挂载 print-data 拦截器（内部防重复）
+        installHook() {
+            if (unsafeWindow.XMLHttpRequest.prototype._gm_schedule_qr_hooked) return;
+            unsafeWindow.XMLHttpRequest.prototype._gm_schedule_qr_hooked = true;
+
+            const _send = unsafeWindow.XMLHttpRequest.prototype.send;
+            const _open = unsafeWindow.XMLHttpRequest.prototype.open;
+            const that = this;
+
+            unsafeWindow.XMLHttpRequest.prototype.open = function (method, url) {
+                this._gm_qr_url = url;
+                return _open.apply(this, arguments);
+            };
+            unsafeWindow.XMLHttpRequest.prototype.send = function (data) {
+                this.addEventListener('load', function () {
+                    if (this._gm_qr_url && String(this._gm_qr_url).includes('/print-data/')) {
+                        try {
+                            const semesterId = (String(this._gm_qr_url).match(/\/semester\/(\d+)\/print-data\//) || [])[1] || null;
+                            const json = that.extractVm(JSON.parse(this.responseText));
+                            that._captured = { semesterId: semesterId, data: json };
+                            const actCount = Array.isArray(json.activities) ? json.activities.length : -1;
+                            Logger.log(that.TAG, `拦截到课表 print-data（semester=${semesterId || '未知'}，activities=${actCount}）`);
+                        } catch (e) {
+                            Logger.warn(that.TAG, '解析 print-data 失败', e);
+                        }
+                    }
+                }, { once: true });
+                return _send.apply(this, arguments);
+            };
+            Logger.log(that.TAG, 'print-data 拦截器已挂载');
+        },
+
+        // 【阶段2】UI 阶段执行：在「打印」按钮后注入原生样式入口按钮
+        initUI() {
+            if (!window.location.href.includes('/student/for-std/course-table')) return;
+            if (document.getElementById('gm-schedule-qr-btn')) return;
+
+            // 顶栏按钮由服务端渲染，短暂轮询等待出现
+            let tries = 0;
+            const timer = setInterval(() => {
+                const printBtn = document.getElementById('toPrintPage');
+                if (printBtn) {
+                    clearInterval(timer);
+                    if (document.getElementById('gm-schedule-qr-btn')) return;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.id = 'gm-schedule-qr-btn';
+                    btn.className = 'btn btn-primary';
+                    btn.title = '将当前学期课表生成二维码，供翱翔助手 App 扫码导入';
+                    btn.textContent = '导出到翱翔助手';
+                    btn.addEventListener('click', () => this.openDialog());
+                    printBtn.insertAdjacentElement('afterend', btn);
+                    this.alignButtonGap(btn, printBtn);
+                    Logger.log(this.TAG, '入口按钮已注入');
+                } else if (tries++ > 50) {
+                    clearInterval(timer);
+                }
+            }, 200);
+        },
+
+        // 间距对齐：实测「打印」与左侧原生按钮的间距，补齐新按钮的 margin-left 使视觉一致
+        // （兼容 flex gap 与 margin 两种布局：插入后测差值，仅补不足部分）
+        alignButtonGap(btn, printBtn) {
+            try {
+                const prev = printBtn.previousElementSibling;
+                if (!prev || prev === btn) return;
+                const gapNative = printBtn.getBoundingClientRect().left - prev.getBoundingClientRect().right;
+                const gapMine = btn.getBoundingClientRect().left - printBtn.getBoundingClientRect().right;
+                const extra = Math.max(gapNative - gapMine, 0);
+                if (extra > 0.5) btn.style.marginLeft = `${Math.round(extra)}px`;
+            } catch (e) { /* 间距对齐失败不影响功能 */ }
+        },
+
+        // 读取页面所选学期 id（selectize 下拉的原生 select 保留选中值）
+        getSelectedSemesterId() {
+            const sel = document.getElementById('allSemesters');
+            if (sel && sel.value) return String(sel.value);
+            const sem = unsafeWindow.semesterId;
+            return sem != null ? String(sem) : null;
+        },
+
+        // 兜底：在页面上下文发起同源请求（自动携带瑞数动态参数）
+        fetchPrintData(semesterId) {
+            return new Promise((resolve, reject) => {
+                const dataId = unsafeWindow.dataId;
+                if (!semesterId || dataId == null) {
+                    reject(new Error('无法确定学期或学号参数，请刷新课表页后重试'));
+                    return;
+                }
+                try {
+                    const xhr = new unsafeWindow.XMLHttpRequest();
+                    xhr.open('GET', `/student/for-std/course-table/semester/${semesterId}/print-data/${dataId}`, true);
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest'); // 与页面自身 XHR 保持一致
+                    xhr.addEventListener('load', () => {
+                        if (xhr.status !== 200) {
+                            reject(new Error(`print-data 请求失败（HTTP ${xhr.status}）`));
+                            return;
+                        }
+                        try {
+                            const json = this.extractVm(JSON.parse(xhr.responseText));
+                            this._captured = { semesterId: String(semesterId), data: json };
+                            const actCount = Array.isArray(json.activities) ? json.activities.length : -1;
+                            Logger.log(this.TAG, `主动拉取 print-data 成功（semester=${semesterId}，activities=${actCount}）`);
+                            if (actCount <= 0) {
+                                Logger.warn(this.TAG, `响应缺少排课数据，顶层字段：${Object.keys(json || {}).join(', ')}`);
+                            }
+                            resolve(json);
+                        } catch (e) {
+                            reject(new Error('print-data 响应解析失败'));
+                        }
+                    });
+                    xhr.addEventListener('error', () => reject(new Error('print-data 请求网络错误')));
+                    xhr.send();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        },
+
+        // 缓存是否可用：学期匹配且含非空排课数据（防止用空壳响应渲染）
+        isValidCapture(selectedSem) {
+            const c = this._captured;
+            if (!c || !c.data || !Array.isArray(c.data.activities) || c.data.activities.length === 0) return false;
+            return !selectedSem || !c.semesterId || c.semesterId === selectedSem;
+        },
+
+        // 短轮询等待拦截器捕获到有效 print-data（页面自身请求晚于点击时兜底）
+        waitForCapture(selectedSem, timeoutMs) {
+            return new Promise(resolve => {
+                const start = Date.now();
+                const timer = setInterval(() => {
+                    if (this.isValidCapture(selectedSem)) {
+                        clearInterval(timer);
+                        resolve(true);
+                    } else if (Date.now() - start > timeoutMs) {
+                        clearInterval(timer);
+                        resolve(false);
+                    }
+                }, 200);
+            });
+        },
+
+        // 点击入口：确保数据对应所选学期后打开二维码弹窗
+        async openDialog() {
+            const selectedSem = this.getSelectedSemesterId();
+            // 1) 缓存有效 → 直接渲染
+            if (this.isValidCapture(selectedSem)) {
+                await this.showDialog();
+                return;
+            }
+            // 2) 兜底主动拉取（失败不中断，后面还会等拦截器）
+            if (!this._captured || this._captured.semesterId !== selectedSem) {
+                try {
+                    await this.fetchPrintData(selectedSem);
+                } catch (e) {
+                    Logger.warn(this.TAG, '主动拉取 print-data 失败', e);
+                }
+            }
+            // 3) 仍无效时：服务端明确返回空排课则直接提示；否则等待页面自身的 print-data 到达
+            if (!this.isValidCapture(selectedSem)) {
+                const cap = this._captured;
+                const actCount = (cap && cap.data && Array.isArray(cap.data.activities)) ? cap.data.activities.length : null;
+                if (actCount === 0) {
+                    GmDialog.alert({ title: '导出到翱翔助手', message: '当前学期没有排课数据，无需导出。', type: 'info' });
+                    return;
+                }
+                const got = await this.waitForCapture(selectedSem, 8000);
+                if (!got) {
+                    GmDialog.alert({
+                        title: '导出到翱翔助手',
+                        message: '未能获取到课表排课数据。\n请等待课表表格完全加载后重试，或刷新页面后再试。',
+                        type: 'warn'
+                    });
+                    return;
+                }
+            }
+            await this.showDialog();
+        },
+
+        // 用当前缓存渲染二维码弹窗
+        async showDialog() {
+            try {
+                await this.renderDialog(this._captured.data);
+            } catch (e) {
+                Logger.error(this.TAG, '生成二维码失败', e);
+                GmDialog.alert({ title: '导出到翱翔助手', message: `生成二维码失败：\n${e.message}`, type: 'error' });
+            }
+        },
+
+        /**
+         * 将 print-data 响应转换为翱翔助手备份 JSON。
+         * @param {object} printData - print-data 接口响应
+         * @param {string|null} semesterId - 学期 id（用于从页面 semesters 列表取学期信息）
+         * @returns {{backup: object, semesterName: string, courseCount: number, slotCount: number}}
+         */
+        convertToBackup(printData, semesterId) {
+            const activities = Array.isArray(printData.activities) ? printData.activities : [];
+            if (activities.length === 0) throw new Error('当前学期没有可导出的排课数据');
+
+            // 考核方式：按 lessonId 从排课明细取考试/考查
+            const lessonExamMode = {};
+            (Array.isArray(printData.arrangedLessonSearchVms) ? printData.arrangedLessonSearchVms : []).forEach(les => {
+                if (les && les.id != null) {
+                    lessonExamMode[String(les.id)] = (les.examMode && les.examMode.nameZh)
+                        || (les.course && les.course.defaultExamMode && les.course.defaultExamMode.nameZh)
+                        || null;
+                }
+            });
+
+            const semester = this.buildSemester(semesterId, printData);
+
+            // 聚合：同一门课程的多个排课活动合并为多个时段
+            const courseMap = new Map();
+            const seenSlots = new Set();
+            let slotCount = 0;
+
+            activities.forEach(act => {
+                if (!act || !act.courseName) return;
+                const sections = this.expandSections(act.startUnit, act.endUnit);
+                const weekRange = this.formatWeekRange(act);
+                if (sections.length === 0 || !weekRange) return;
+
+                // 完全重复的排课活动去重
+                const key = `${act.courseCode || act.courseName}|${act.weekday}|${act.startUnit}-${act.endUnit}|${weekRange}|${act.room || ''}`;
+                if (seenSlots.has(key)) return;
+                seenSlots.add(key);
+
+                const courseKey = act.courseCode || act.courseName;
+                if (!courseMap.has(courseKey)) {
+                    courseMap.set(courseKey, {
+                        id: `course-${act.courseCode || act.lessonId}`,
+                        name: act.courseName,
+                        semesterId: semester.id,
+                        timeSlots: [],
+                        code: act.courseCode || null,
+                        credits: typeof act.credits === 'number' ? act.credits : null,
+                        teacher: Array.isArray(act.teachers) ? act.teachers.filter(Boolean).join('、') : null,
+                        assessmentMethod: this.mapAssessment(lessonExamMode[String(act.lessonId)]),
+                        notes: act.lessonRemark || null,
+                        color: this.COLOR_PALETTE[courseMap.size % this.COLOR_PALETTE.length]
+                    });
+                }
+                const course = courseMap.get(courseKey);
+                course.timeSlots.push({
+                    weekRange: weekRange,
+                    repeatRule: '', // 西工大用显式周次，无单双周规则
+                    dayOfWeek: act.weekday,
+                    classSections: sections,
+                    teacher: null,
+                    location: this.formatLocation(act)
+                });
+                slotCount++;
+            });
+
+            const courses = Array.from(courseMap.values());
+            if (courses.length === 0) throw new Error('未能从排课数据中解析出有效时段');
+
+            return {
+                backup: { courses: courses, settings: { semesters: [semester] } },
+                semesterName: semester.name,
+                courseCount: courses.length,
+                slotCount: slotCount
+            };
+        },
+
+        /**
+         * 构造学期对象（教务口径，startDate/endDate 含考试周）。
+         * 优先用页面内嵌 semesters 列表，兜底用 print-data 内嵌 lesson 的 semester。
+         */
+        buildSemester(semesterId, printData) {
+            let semMeta = null;
+            try {
+                const list = unsafeWindow.semesters;
+                if (Array.isArray(list) && semesterId) {
+                    semMeta = list.find(s => s && String(s.id) === String(semesterId)) || null;
+                }
+            } catch (e) { /* 页面变量不可用时忽略 */ }
+            if (!semMeta) {
+                const les = (Array.isArray(printData.arrangedLessonSearchVms) ? printData.arrangedLessonSearchVms : [])
+                    .find(l => l && l.semester && l.semester.startDate);
+                if (les) semMeta = les.semester;
+            }
+            if (!semMeta || !semMeta.startDate) throw new Error('缺少学期起止日期，无法生成备份');
+
+            const startDate = String(semMeta.startDate);
+            const endDate = semMeta.endDate ? String(semMeta.endDate) : null;
+            let weekCount = null;
+            if (endDate) {
+                const days = (new Date(endDate) - new Date(startDate)) / 86400000;
+                if (Number.isFinite(days) && days >= 0) weekCount = Math.floor(days / 7) + 1;
+            }
+            const semester = {
+                id: `semester-${semesterId || semMeta.id}`,
+                name: semMeta.nameZh || semMeta.name || '学期',
+                startDate: startDate
+            };
+            if (endDate) semester.endDate = endDate;
+            if (weekCount) semester.weekCount = weekCount;
+            return semester;
+        },
+
+        /**
+         * 周次：weeksStr 形如 "2~4,6~9" / "4"，换为规范的 "-" 分隔；
+         * 异常时兜底由 weekIndexes 压缩连续区间。
+         */
+        formatWeekRange(act) {
+            if (typeof act.weeksStr === 'string' && /\d/.test(act.weeksStr) && /^[\d,\-~\s]+$/.test(act.weeksStr.trim())) {
+                return act.weeksStr.trim().replace(/\s+/g, '').replace(/~/g, '-');
+            }
+            const weeks = (Array.isArray(act.weekIndexes) ? act.weekIndexes : [])
+                .filter(n => Number.isInteger(n) && n > 0)
+                .sort((a, b) => a - b);
+            if (weeks.length === 0) return null;
+            const parts = [];
+            let start = weeks[0], prev = weeks[0];
+            for (let i = 1; i <= weeks.length; i++) {
+                if (i < weeks.length && weeks[i] === prev + 1) { prev = weeks[i]; continue; }
+                parts.push(start === prev ? `${start}` : `${start}-${prev}`);
+                if (i < weeks.length) { start = prev = weeks[i]; }
+            }
+            return parts.join(',');
+        },
+
+        // 节次：startUnit~endUnit 区间展开为节次号列表
+        expandSections(startUnit, endUnit) {
+            const s = Number.parseInt(startUnit, 10);
+            const e = Number.parseInt(endUnit, 10);
+            if (!Number.isInteger(s) || !Number.isInteger(e) || s < 1 || e < s) return [];
+            const arr = [];
+            for (let i = s; i <= e; i++) arr.push(i);
+            return arr;
+        },
+
+        // 地点：campus/building/room 去重拼接（与翱翔助手自有同步的地点口径一致）
+        formatLocation(act) {
+            const parts = [act.campus, act.building, act.room]
+                .filter(v => typeof v === 'string' && v.trim())
+                .map(v => v.trim());
+            return Array.from(new Set(parts)).join(' ') || null;
+        },
+
+        // 考核方式映射：规范只识别 考试/考察/PnP，教务的「考查」对应「考察」
+        mapAssessment(mode) {
+            if (mode === '考试') return '考试';
+            if (mode === '考查' || mode === '考察') return '考察';
+            return null;
+        },
+
+        /**
+         * 构造二维码 payload；超容量时按规范顺序裁剪 notes → code → assessmentMethod。
+         * @returns {Promise<{payload: string, dropped: string[]}>}
+         */
+        async buildPayload(backup) {
+            const dropped = [];
+            const attempts = [
+                { label: '', strip: b => b },
+                { label: '备注', strip: b => { b.courses.forEach(c => { delete c.notes; }); return b; } },
+                { label: '课程代码', strip: b => { b.courses.forEach(c => { delete c.code; }); return b; } },
+                { label: '考核方式', strip: b => { b.courses.forEach(c => { delete c.assessmentMethod; }); return b; } }
+            ];
+            for (const step of attempts) {
+                if (step.label) dropped.push(step.label);
+                const json = JSON.stringify(step.strip(JSON.parse(JSON.stringify(backup))));
+                const payload = this.QR_PAYLOAD_PREFIX + this.bytesToBase64(await this.gzipBytes(json));
+                if (payload.length <= this.QR_PAYLOAD_MAX) return { payload: payload, dropped: dropped };
+            }
+            throw new Error('课表数据超出二维码容量上限（裁剪备注、课程代码、考核方式后仍放不下）');
+        },
+
+        // gzip 压缩（Chrome 103+ 的 CompressionStream）
+        async gzipBytes(text) {
+            return new Uint8Array(await new Response(
+                new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))
+            ).arrayBuffer());
+        },
+
+        // 标准 Base64（含 +/=，非 URL-safe，无换行）
+        bytesToBase64(bytes) {
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary);
+        },
+
+        // 渲染二维码弹窗
+        ensureStyles() {
+            if (document.getElementById('gm-schedule-qr-style')) return;
+            const style = getOrCreateStyleEl('gm-schedule-qr-style');
+            style.textContent = `
+            @keyframes gmQrFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .gm-qr-card { background: #fff; border-radius: 12px; width: 420px; max-width: 92%; box-shadow: 0 12px 32px rgba(0,0,0,0.25); font-family: var(--gm-font); }
+            .gm-qr-header { padding: 16px 20px; border-bottom: 1px solid #ebeef5; display: flex; justify-content: space-between; align-items: center; }
+            .gm-qr-title { font-size: 16px; font-weight: 600; color: #303133; display: flex; align-items: center; gap: 8px; }
+            .gm-qr-close { border: none; background: none; font-size: 24px; color: #909399; cursor: pointer; padding: 0 4px; line-height: 1; }
+            .gm-qr-close:hover { color: #f56c6c; }
+            .gm-qr-body { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+            .gm-qr-canvas-holder { line-height: 0; max-width: 100%; }
+            .gm-qr-meta { font-size: 13px; color: #303133; font-weight: 600; }
+            .gm-qr-hint { font-size: 12px; color: #909399; text-align: center; line-height: 1.6; }
+            .gm-qr-note { font-size: 12px; color: #e6a23c; background: #fdf6ec; border: 1px solid #faecd8; border-radius: 6px; padding: 6px 12px; }
+        `;
+            document.head.appendChild(style);
+        },
+
+        async renderDialog(printData) {
+            if (typeof qrcode !== 'function') throw new Error('二维码库未加载，请检查脚本 @require');
+
+            const { backup, semesterName, courseCount } = this.convertToBackup(printData, this.getSelectedSemesterId());
+            const { payload, dropped } = await this.buildPayload(backup);
+
+            const qr = qrcode(0, 'L'); // typeNumber 0 自动选版本，纠错级别 L 容量最大
+            qr.addData(payload); // payload 为纯 ASCII，默认字节模式
+            qr.make();
+            const canvas = this.drawQrCanvas(qr);
+
+            this.ensureStyles();
+            const old = document.getElementById('gm-schedule-qr-modal');
+            if (old) old.remove();
+
+            const droppedTip = dropped.length > 0
+                ? `<div class="gm-qr-note">为控制二维码体积，已省略：${esc(dropped.join('、'))}</div>`
+                : '';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'gm-schedule-qr-modal';
+            overlay.style.cssText = 'position:fixed; inset:0; z-index:100010; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; animation:gmQrFadeIn 0.2s ease-out;';
+            overlay.innerHTML = `
+            <div class="gm-qr-card">
+                <div class="gm-qr-header">
+                    <div class="gm-qr-title">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="#409EFF" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><line x1="14" y1="14" x2="14" y2="21"></line><line x1="18" y1="14" x2="21" y2="14"></line><line x1="21" y1="18" x2="21" y2="21"></line><line x1="14" y1="18" x2="18" y2="18"></line></svg>
+                        导出到翱翔助手
+                    </div>
+                    <button type="button" class="gm-qr-close" aria-label="关闭">&times;</button>
+                </div>
+                <div class="gm-qr-body">
+                    <div class="gm-qr-canvas-holder"></div>
+                    <div class="gm-qr-meta">${esc(semesterName)}&nbsp;&nbsp;${courseCount} 门课程</div>
+                    <div class="gm-qr-hint">打开翱翔助手 App 的「导入课表数据」，扫描二维码导入当前课表</div>
+                    ${droppedTip}
+                </div>
+            </div>`;
+            overlay.querySelector('.gm-qr-canvas-holder').appendChild(canvas);
+            document.body.appendChild(overlay);
+
+            const close = () => overlay.remove();
+            overlay.querySelector('.gm-qr-close').onclick = close;
+            overlay.onclick = e => { if (e.target === overlay) close(); };
+            Logger.log(this.TAG, `二维码已生成（payload ${payload.length} 字节，${qr.getModuleCount()}×${qr.getModuleCount()} 模块）`);
+        },
+
+        // 将二维码绘制到 canvas：按设备像素取整数模块宽度并保留 4 模块静区，
+        // 避免 CSS 非整数缩放打碎模块边界导致扫不出来
+        drawQrCanvas(qr) {
+            const count = qr.getModuleCount();
+            const dpr = window.devicePixelRatio || 1;
+            const quiet = 4;
+            let scale = Math.floor(320 * dpr / count);
+            if (scale < 2) scale = 2;
+            const size = (count + quiet * 2) * scale;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#000';
+            for (let r = 0; r < count; r++) {
+                for (let c = 0; c < count; c++) {
+                    if (qr.isDark(r, c)) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+                }
+            }
+            canvas.style.width = `${size / dpr}px`;
+            canvas.style.height = `${size / dpr}px`;
+            return canvas;
+        }
+    };
+
+    // 课表二维码模块【阶段1】：同教材模块，抢在页面 XHR 之前挂载拦截器（内部防重复）
+    try {
+        ScheduleQrModule.installHook();
+    } catch (e) { Logger.error('2.14', '课表二维码拦截器挂载失败', e); }
 
     // --- 3. 脚本主入口（路由分发，全部页面初始化的唯一入口） ---
 
@@ -8583,6 +9116,7 @@
         // 5. 我的课表页面
         else if (href.includes('/student/for-std/course-table')) {
             TextbookInfoModule.initUI(); // 仅执行 UI 初始化
+            ScheduleQrModule.initUI(); // 注入「导出到翱翔助手」按钮
         }
 
         // 6. 教师主页跨标签页自动触发搜索

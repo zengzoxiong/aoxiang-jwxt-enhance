@@ -44,6 +44,7 @@
 - **一键自动评教**：进入评教页面后一键打开自动评教面板，支持**自动完成最低评教**（每门课评 1 人，随机 80–89 分）与**指定分数评教**（未填分数默认 95 分）两种模式。
 - **人员信息检索**：在门户 / 教师页面按姓名等信息检索人员，并支持跨标签页自动注入搜索。
 - **我的课表教材信息显示**：在「我的课表」中展示课程教材信息，并提供学堂在线、中国大学 MOOC、超星、智慧树等网课平台的快捷跳转。
+- **课表导出二维码**：在「我的课表」点击「导出到翱翔助手」，将当前学期课表生成二维码，用[翱翔助手](https://github.com/Lorcas-Zephyr/aoxiang-assistant) App 扫码即可一键导入课表（含周次、节次、地点、教师与考核方式）。
 - **常用链接访问**：聚合友情链接、校内网站与网课平台的一键入口（详见下方「常用链接」）。
 
 ### 体验优化
@@ -94,8 +95,8 @@
 ## 运行环境与依赖
 
 - **运行环境**：现代浏览器 + Tampermonkey（或兼容的油猴管理器）
-- **当前版本**：1.8.4
-- **外部库**：[ExcelJS](https://github.com/exceljs/exceljs) 4.3.0、[FileSaver.js](https://github.com/eligrey/FileSaver.js) 2.0.5
+- **当前版本**：1.8.5
+- **外部库**：[ExcelJS](https://github.com/exceljs/exceljs) 4.3.0、[FileSaver.js](https://github.com/eligrey/FileSaver.js) 2.0.5、[qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4
 - **脚本权限**：`GM_xmlhttpRequest`、`GM_setValue` / `GM_getValue`、`unsafeWindow`
 
 ## 许可证
